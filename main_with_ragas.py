@@ -13,6 +13,14 @@ RAG 평가 도구 - RAGAS 벤치마크 통합 버전
 
 import os
 import sys
+
+os.environ["CHROMA_TELEMETRY_IMPL"] = "none"
+os.environ["CHROMA_ANONYMIZED_TELEMETRY"] = "false"
+os.environ["CHROMADB_NO_TELEMETRY"] = "true"
+
+import warnings
+warnings.filterwarnings('ignore')
+
 import json
 import yaml
 import logging
@@ -20,7 +28,6 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Tuple
-import warnings
 
 import pandas as pd
 import numpy as np
@@ -53,11 +60,8 @@ except ImportError:
     RAGAS_AVAILABLE = False
     print("⚠️  RAGAS 미설치. 기본 메트릭만 사용됩니다.")
 
-# 경고 제거
-warnings.filterwarnings('ignore')
 load_dotenv()
 
-os.environ["CHROMA_TELEMETRY_IMPL"] = "none"
 
 # ============================================================================
 # 로깅 설정
@@ -69,7 +73,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+logging.getLogger("chromadb").setLevel(logging.CRITICAL)
+logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.CRITICAL)
 # ============================================================================
 # RAG 평가 엔진 (RAGAS 통합)
 # ============================================================================
@@ -581,7 +587,26 @@ class RAGEvaluationEngine:
             logger.error(f"ChromaDB 오류: {e}")
             raise
 
-    
+    def _retrieve(self, query: str, collection: chromadb.Collection,
+             retrieval_config: Dict) -> List[str]:
+        """문서 검색"""
+        try:
+            top_k = retrieval_config.get('top_k', 5)
+            
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k
+            )
+            
+            if results and 'documents' in results and results['documents']:
+                return results['documents'][0][:top_k]
+            
+            return []
+        
+        except Exception as e:
+            logger.warning(f"검색 오류: {e}")
+            return []
+        
     # ========================================================================
     # 4단계: 결과 저장 및 리포트
     # ========================================================================
