@@ -588,13 +588,23 @@ class RAGEvaluationEngine:
             raise
 
     def _retrieve(self, query: str, collection: chromadb.Collection,
-             retrieval_config: Dict) -> List[str]:
+                retrieval_config: Dict) -> List[str]:
         """문서 검색"""
         try:
             top_k = retrieval_config.get('top_k', 5)
             
+            # 쿼리도 BGE-M3로 임베딩 (중요!)
+            query_embedding = self.embedding_model.encode(
+                [query],
+                batch_size=1,
+                max_length=512,
+                return_dense=True,
+                return_sparse=False
+            )['dense_vecs'].tolist()
+            
+            # 임베딩된 쿼리로 검색
             results = collection.query(
-                query_texts=[query],
+                query_embeddings=query_embedding,
                 n_results=top_k
             )
             
@@ -606,6 +616,7 @@ class RAGEvaluationEngine:
         except Exception as e:
             logger.warning(f"검색 오류: {e}")
             return []
+
         
     # ========================================================================
     # 4단계: 결과 저장 및 리포트
