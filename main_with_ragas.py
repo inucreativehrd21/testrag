@@ -120,6 +120,7 @@ class RAGEvaluationEngine:
         self.results_dir = Path("results")
         self.results_dir.mkdir(exist_ok=True)
         
+        self.embedding_model = None
         # 크롤링 데이터 로드
         self._load_crawled_data()
     
