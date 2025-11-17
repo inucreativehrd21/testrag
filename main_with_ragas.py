@@ -57,6 +57,8 @@ except ImportError:
 warnings.filterwarnings('ignore')
 load_dotenv()
 
+os.environ["CHROMA_TELEMETRY_IMPL"] = "none"
+
 # ============================================================================
 # 로깅 설정
 # ============================================================================
@@ -494,16 +496,25 @@ class RAGEvaluationEngine:
     
     def _embed_chunks(self, chunks: List[str]) -> Tuple:
         """청크 임베딩"""
-        model = BGEM3FlagModel(
-            'BAAI/bge-m3',
-            use_fp16=True,
-            device=self.device
-        )
+        if self.embedding_model is None:
+            self.embedding_model = BGEM3FlagModel(
+                'BAAI/bge-m3',
+                use_fp16=True,
+                device=self.device
+            )
+    
+            # 동적 배치 크기 계산 (← 핵심 수정)
+            if len(chunks) > 1000:
+                batch_size = 8
+            elif len(chunks) > 500:
+                batch_size = 16
+            else:
+                batch_size = 32
         
-        embeddings = model.encode(
+        embeddings = self.embedding_model.encode(
             chunks,
-            batch_size=32,
-            max_length=1024,
+            batch_size=batch_size,
+            max_length=512,
             return_dense=True,
             return_sparse=True,
         )
@@ -511,25 +522,25 @@ class RAGEvaluationEngine:
         return embeddings['dense_vecs'], embeddings['lexical_weights']
     
     def _build_vectordb(self, chunks: List[str], embeddings: np.ndarray) -> chromadb.Collection:
-        """ChromaDB 구축"""
-        client = chromadb.Client()
-        
         try:
-            client.delete_collection(name="rag_eval")
-        except:
-            pass
-        
-        collection = client.get_or_create_collection(name="rag_eval")
-        
-        ids = [f"chunk_{i}" for i in range(len(chunks))]
-        collection.add(
-            ids=ids,
-            documents=chunks,
-            embeddings=embeddings.tolist(),
-            metadatas=[{"source": f"chunk_{i}"} for i in range(len(chunks))]
-        )
-        
-        return collection
+            # 텔레메트리 비활성화 상태에서 클라이언트 생성
+            client = chromadb.Client()
+            try:
+                client.delete_collection(name="rag_eval")
+            except:
+                pass
+            collection = client.get_or_create_collection(name="rag_eval")
+            ids = [f"chunk_{i}" for i in range(len(chunks))]
+            collection.add(
+                ids=ids,
+                documents=chunks,
+                embeddings=embeddings.tolist(),
+                metadatas=[{"source": f"chunk_{i}"} for i in range(len(chunks))]
+            )
+            return collection
+        except Exception as e:
+            logger.warning(f"ChromaDB 오류: {e}")
+            return None
     
     def _retrieve(self, query: str, collection: chromadb.Collection,
                  retrieval_config: Dict) -> List[str]:
