@@ -1,0 +1,66 @@
+
+# RAG 평가 설정 파일
+# 청킹 전략, 검색 구성, 평가 파라미터 정의
+
+chunking_strategies:
+  strategy_1:
+    name: "Small (256, overlap=0)"
+    chunk_size: 256
+    chunk_overlap: 0
+  
+  strategy_2:
+    name: "Small-Medium (512, overlap=50)"
+    chunk_size: 512
+    chunk_overlap: 50
+  
+  strategy_3:
+    name: "Medium (1024, overlap=100)"
+    chunk_size: 1024
+    chunk_overlap: 100
+  
+  strategy_4:
+    name: "Large (2048, overlap=200)"
+    chunk_size: 2048
+    chunk_overlap: 200
+
+retrieval_configs:
+  config_1:
+    name: "Dense Only (top_k=5)"
+    retrieval_type: "dense"
+    top_k: 5
+    use_reranker: false
+  
+  config_2:
+    name: "Dense Only (top_k=10)"
+    retrieval_type: "dense"
+    top_k: 10
+    use_reranker: false
+  
+  config_3:
+    name: "Hybrid Dense+Sparse (alpha=0.5, top_k=10)"
+    retrieval_type: "hybrid"
+    top_k: 10
+    hybrid_alpha: 0.5
+    use_reranker: false
+  
+  config_4:
+    name: "Dense + Reranker (top_k=10)"
+    retrieval_type: "dense"
+    top_k: 10
+    use_reranker: true
+    rerank_model: "mixedbread-ai/mxbai-reranker-v1"
+
+evaluation:
+  sample_size: 5
+  use_ragas: false
+  metrics:
+    - context_precision
+    - context_recall
+    - faithfulness
+    - answer_relevancy
+
+embedding:
+  model_name: "BAAI/bge-m3"
+  use_fp16: true
+  batch_size: 32
+  max_length: 1024

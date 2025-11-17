@@ -1,0 +1,154 @@
+{
+  "git": [
+    {
+      "query": "What is the difference between git merge and git rebase?",
+      "ground_truth": "Git merge combines branches by creating a new merge commit, preserving history. Git rebase moves commits to a new base, creating a linear history."
+    },
+    {
+      "query": "How do I undo the last commit in Git?",
+      "ground_truth": "Use 'git reset HEAD~1' to undo the last commit while keeping changes, or 'git reset --hard HEAD~1' to discard changes."
+    },
+    {
+      "query": "What is a Git branch and how do you create one?",
+      "ground_truth": "A Git branch is a pointer to a commit. Create one with 'git branch <branch-name>' or 'git checkout -b <branch-name>' to create and switch."
+    },
+    {
+      "query": "How do you resolve merge conflicts in Git?",
+      "ground_truth": "Edit conflicted files to resolve conflicts, then stage resolved files with 'git add' and complete with 'git commit'."
+    },
+    {
+      "query": "What is the purpose of git stash?",
+      "ground_truth": "Git stash temporarily saves uncommitted changes, allowing you to switch branches without committing. Retrieve with 'git stash pop'."
+    },
+    {
+      "query": "How do you view the commit history in Git?",
+      "ground_truth": "Use 'git log' to view commit history. Add --oneline for condensed view or --graph for visual branch structure."
+    },
+    {
+      "query": "What is the difference between git fetch and git pull?",
+      "ground_truth": "Git fetch downloads changes without merging. Git pull fetches and automatically merges changes into current branch."
+    },
+    {
+      "query": "How do you create a tag in Git?",
+      "ground_truth": "Create lightweight tag with 'git tag <tagname>' or annotated tag with 'git tag -a <tagname> -m \"message\"'."
+    },
+    {
+      "query": "What is the purpose of .gitignore file?",
+      "ground_truth": ".gitignore specifies files and directories that Git should ignore and not track in version control."
+    },
+    {
+      "query": "How do you revert a specific commit in Git?",
+      "ground_truth": "Use 'git revert <commit-hash>' to create a new commit that undoes changes from the specified commit."
+    }
+  ],
+  "python": [
+    {
+      "query": "What is the difference between a list and a tuple in Python?",
+      "ground_truth": "Lists are mutable (can be modified), tuples are immutable. Lists use [], tuples use (). Tuples are faster and can be dictionary keys."
+    },
+    {
+      "query": "How do you handle exceptions in Python?",
+      "ground_truth": "Use try-except blocks. Place risky code in try, handle exceptions in except. Optionally use else for no-exception code and finally for cleanup."
+    },
+    {
+      "query": "What are Python decorators and how do they work?",
+      "ground_truth": "Decorators are functions that modify other functions. Applied with @decorator_name syntax, they wrap functions to add functionality before/after execution."
+    },
+    {
+      "query": "Explain the difference between __str__ and __repr__ in Python.",
+      "ground_truth": "__str__ returns user-friendly string for end users. __repr__ returns developer-friendly representation for debugging, should be unambiguous."
+    },
+    {
+      "query": "What is list comprehension in Python?",
+      "ground_truth": "List comprehension is a concise way to create lists: [expression for item in iterable if condition]. More readable than traditional loops."
+    },
+    {
+      "query": "How does Python's garbage collection work?",
+      "ground_truth": "Python uses reference counting and garbage collector to free memory. When object's reference count reaches zero, memory is freed automatically."
+    },
+    {
+      "query": "What are *args and **kwargs in Python?",
+      "ground_truth": "*args passes variable number of positional arguments as tuple. **kwargs passes variable number of keyword arguments as dictionary."
+    },
+    {
+      "query": "Explain Python's GIL (Global Interpreter Lock).",
+      "ground_truth": "GIL is a mutex that protects Python objects, allowing only one thread to execute Python bytecode at a time, limiting multicore performance."
+    },
+    {
+      "query": "What is the difference between shallow and deep copy in Python?",
+      "ground_truth": "Shallow copy creates new object but references nested objects. Deep copy creates independent copy of object and all nested objects."
+    },
+    {
+      "query": "How do you create a virtual environment in Python?",
+      "ground_truth": "Use 'python -m venv <env_name>' to create virtual environment. Activate with 'source <env_name>/bin/activate' (Linux/Mac) or '<env_name>\\Scripts\\activate' (Windows)."
+    }
+  ],
+  "docker": [
+    {
+      "query": "What is the difference between Docker image and Docker container?",
+      "ground_truth": "Docker image is a read-only template with application code and dependencies. Container is a runnable instance of an image with its own filesystem."
+    },
+    {
+      "query": "How do you create a Dockerfile?",
+      "ground_truth": "Create a file named 'Dockerfile' with instructions: FROM (base image), COPY/ADD (files), RUN (commands), EXPOSE (ports), CMD/ENTRYPOINT (startup)."
+    },
+    {
+      "query": "What is Docker Compose and when would you use it?",
+      "ground_truth": "Docker Compose is a tool for defining multi-container applications using YAML. Use it to orchestrate multiple containers with dependencies."
+    },
+    {
+      "query": "How do you remove all stopped containers in Docker?",
+      "ground_truth": "Use 'docker container prune' to remove all stopped containers, or 'docker rm $(docker ps -a -q)' to remove all containers."
+    },
+    {
+      "query": "What is the purpose of Docker volumes?",
+      "ground_truth": "Docker volumes persist data outside container lifecycle, allowing data to survive container restarts and be shared between containers."
+    },
+    {
+      "query": "How do you inspect a running Docker container?",
+      "ground_truth": "Use 'docker inspect <container-id>' for detailed JSON info, 'docker logs <container-id>' for logs, or 'docker exec' to run commands inside."
+    },
+    {
+      "query": "What is the difference between CMD and ENTRYPOINT in Dockerfile?",
+      "ground_truth": "CMD provides default arguments for ENTRYPOINT and can be overridden. ENTRYPOINT defines container's main command and is harder to override."
+    },
+    {
+      "query": "How do you build a Docker image from a Dockerfile?",
+      "ground_truth": "Use 'docker build -t <image-name>:<tag> <context-path>' where context-path is typically '.' for current directory."
+    }
+  ],
+  "aws": [
+    {
+      "query": "What is the difference between EC2 and Lambda?",
+      "ground_truth": "EC2 provides virtual servers you manage (IaaS). Lambda is serverless compute that runs code in response to events (FaaS)."
+    },
+    {
+      "query": "How does S3 ensure data durability?",
+      "ground_truth": "S3 stores objects redundantly across multiple devices and facilities. Standard storage provides 99.999999999% (11 nines) durability."
+    },
+    {
+      "query": "What is AWS IAM and why is it important?",
+      "ground_truth": "IAM (Identity and Access Management) controls access to AWS resources. It manages users, groups, roles, and permissions for security."
+    },
+    {
+      "query": "Explain the difference between Security Groups and NACLs in AWS.",
+      "ground_truth": "Security Groups are stateful firewalls at instance level. NACLs (Network ACLs) are stateless firewalls at subnet level."
+    },
+    {
+      "query": "What is an AWS VPC?",
+      "ground_truth": "VPC (Virtual Private Cloud) is isolated virtual network in AWS. You control IP ranges, subnets, route tables, and network gateways."
+    },
+    {
+      "query": "How do you secure data in S3?",
+      "ground_truth": "Use encryption (SSE-S3, SSE-KMS, SSE-C), bucket policies, IAM policies, versioning, MFA delete, and access logging."
+    },
+    {
+      "query": "What is the purpose of AWS CloudFormation?",
+      "ground_truth": "CloudFormation is Infrastructure as Code (IaC) service. Define AWS resources in templates (JSON/YAML) for automated provisioning."
+    },
+    {
+      "query": "Explain the difference between horizontal and vertical scaling in AWS.",
+      "ground_truth": "Horizontal scaling adds more instances (scale out). Vertical scaling increases instance size (scale up). Horizontal is more elastic."
+    }
+  ]
+}
