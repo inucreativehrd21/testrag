@@ -29,7 +29,12 @@ from dotenv import load_dotenv
 
 # PyTorch & ML
 import torch
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+try:
+    # LangChain 0.1.x
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ImportError:
+    # LangChain 0.0.x 호환
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
 from FlagEmbedding import BGEM3FlagModel
 import chromadb
 
