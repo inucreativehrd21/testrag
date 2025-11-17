@@ -496,67 +496,91 @@ class RAGEvaluationEngine:
         return splitter.split_text(text)
     
     def _embed_chunks(self, chunks: List[str]) -> Tuple:
-        """청크 임베딩"""
-        if self.embedding_model is None:
-            self.embedding_model = BGEM3FlagModel(
-                'BAAI/bge-m3',
-                use_fp16=True,
-                device=self.device
-            )
-    
-            # 동적 배치 크기 계산 (← 핵심 수정)
-            if len(chunks) > 1000:
+        """임베딩 (배치 크기 최적화)"""
+        try:
+            # 모델 캐시
+            if self.embedding_model is None:
+                logger.info("BGE-M3 모델 로드 중...")
+                self.embedding_model = BGEM3FlagModel(
+                    'BAAI/bge-m3',
+                    use_fp16=True,
+                    device=self.device
+                )
+                logger.info("✓ BGE-M3 모델 로드 완료")
+            
+            # 동적 배치 크기 (모든 경로에서 정의)
+            num_chunks = len(chunks)
+            
+            if num_chunks > 10000:
+                batch_size = 4
+            elif num_chunks > 5000:
                 batch_size = 8
-            elif len(chunks) > 500:
+            elif num_chunks > 1000:
                 batch_size = 16
             else:
-                batch_size = 32
+                batch_size = 32  # ← 반드시 모든 경로에서 정의
+            
+            # 임베딩 실행
+            embeddings = self.embedding_model.encode(
+                chunks,
+                batch_size=batch_size,  # ← 이제 항상 정의됨
+                max_length=512,
+                return_dense=True,
+                return_sparse=True,
+            )
+            
+            return embeddings['dense_vecs'], embeddings['lexical_weights']
         
-        embeddings = self.embedding_model.encode(
-            chunks,
-            batch_size=batch_size,
-            max_length=512,
-            return_dense=True,
-            return_sparse=True,
-        )
-        
-        return embeddings['dense_vecs'], embeddings['lexical_weights']
+        except Exception as e:
+            logger.error(f"임베딩 오류: {e}")
+            raise
+
     
     def _build_vectordb(self, chunks: List[str], embeddings: np.ndarray) -> chromadb.Collection:
+        """ChromaDB 구축 (배치 크기 제한 해결)"""
         try:
-            # 텔레메트리 비활성화 상태에서 클라이언트 생성
             client = chromadb.Client()
+            
             try:
                 client.delete_collection(name="rag_eval")
             except:
                 pass
+            
             collection = client.get_or_create_collection(name="rag_eval")
+            
+            # ChromaDB 최대 배치 크기: 41666
+            # 안전 마진: 30000
+            max_batch_size = 30000
+            
             ids = [f"chunk_{i}" for i in range(len(chunks))]
-            collection.add(
-                ids=ids,
-                documents=chunks,
-                embeddings=embeddings.tolist(),
-                metadatas=[{"source": f"chunk_{i}"} for i in range(len(chunks))]
-            )
+            embeddings_list = embeddings.tolist()
+            metadatas = [{"source": f"chunk_{i}"} for i in range(len(chunks))]
+            
+            # 배치로 나누어 추가
+            num_batches = (len(chunks) + max_batch_size - 1) // max_batch_size
+            
+            for batch_idx in range(num_batches):
+                start_idx = batch_idx * max_batch_size
+                end_idx = min((batch_idx + 1) * max_batch_size, len(chunks))
+                
+                batch_ids = ids[start_idx:end_idx]
+                batch_chunks = chunks[start_idx:end_idx]
+                batch_embeddings = embeddings_list[start_idx:end_idx]
+                batch_metadatas = metadatas[start_idx:end_idx]
+                
+                collection.add(
+                    ids=batch_ids,
+                    documents=batch_chunks,
+                    embeddings=batch_embeddings,
+                    metadatas=batch_metadatas
+                )
+            
             return collection
-        except Exception as e:
-            logger.warning(f"ChromaDB 오류: {e}")
-            return None
-    
-    def _retrieve(self, query: str, collection: chromadb.Collection,
-                 retrieval_config: Dict) -> List[str]:
-        """문서 검색"""
-        top_k = retrieval_config.get('top_k', 5)
         
-        try:
-            results = collection.query(
-                query_texts=[query],
-                n_results=top_k
-            )
-            return results['documents'][0][:top_k] if results['documents'] else []
         except Exception as e:
-            logger.warning(f"검색 오류: {e}")
-            return []
+            logger.error(f"ChromaDB 오류: {e}")
+            raise
+
     
     # ========================================================================
     # 4단계: 결과 저장 및 리포트
