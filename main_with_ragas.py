@@ -657,6 +657,8 @@ class RAGEvaluationEngine:
         tokenizer.padding_side = 'right'
         if hasattr(reranker.model, 'config'):
             reranker.model.config.pad_token_id = tokenizer.pad_token_id
+        if hasattr(reranker, 'model') and hasattr(reranker.model, 'resize_token_embeddings'):
+            reranker.model.resize_token_embeddings(len(tokenizer))
 
     def _batched_reranker_predict(self, reranker, pairs: List[List[str]]) -> List[float]:
         if not pairs:
