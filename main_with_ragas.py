@@ -465,6 +465,60 @@ class RAGEvaluationEngine:
         except Exception as e:
             logger.warning(f"리랭킹 실패: {e}")
             return documents[:top_k]
+
+    def _ensemble_rerank_documents(self, query: str, documents: List[str],
+                                   ensemble_config: List[Dict], top_k: int) -> List[str]:
+        """여러 리랭커를 앙상블"""
+        if not documents or not ensemble_config:
+            return documents[:top_k]
+        pairs = [[query, doc] for doc in documents]
+        scores_total = np.zeros(len(documents))
+        valid_models = 0
+        for rerank_def in ensemble_config:
+            model_name = rerank_def.get('model') or rerank_def.get('rerank_model')
+            weight = rerank_def.get('weight', 1.0)
+            reranker = self._get_reranker(model_name)
+            if reranker is None:
+                continue
+            try:
+                scores = np.array(reranker.predict(pairs))
+                scores_total += weight * scores
+                valid_models += 1
+            except Exception as e:
+                logger.warning(f"앙상블 리랭커 실패 ({model_name}): {e}")
+        if valid_models == 0:
+            return documents[:top_k]
+        ranked = [doc for _, doc in sorted(zip(scores_total, documents), reverse=True)]
+        return ranked[:top_k]
+
+    def _two_stage_pipeline(self, query: str, documents: List[str],
+                            retrieval_config: Dict, top_k: int) -> List[str]:
+        """Two-stage retrieval: 빠른 1차 선별 후 고정밀 2차"""
+        stage1_conf = retrieval_config.get('stage1', {})
+        stage2_conf = retrieval_config.get('stage2', {})
+        if not documents:
+            return []
+        candidate_k = stage1_conf.get('candidate_k', max(top_k * 3, top_k))
+        keep_k = stage1_conf.get('keep_k', max(top_k, 10))
+        stage1_docs = documents[:candidate_k]
+        if stage1_conf.get('rerank_model'):
+            stage1_docs = self._rerank_documents(
+                query,
+                stage1_docs,
+                stage1_conf.get('rerank_model'),
+                keep_k
+            )
+        else:
+            stage1_docs = stage1_docs[:keep_k]
+        final_k = stage2_conf.get('final_k', top_k)
+        if stage2_conf.get('rerank_model'):
+            return self._rerank_documents(
+                query,
+                stage1_docs,
+                stage2_conf.get('rerank_model'),
+                final_k
+            )
+        return stage1_docs[:final_k]
     
     # ========================================================================
     # 3단계: 평가 실행
@@ -758,11 +812,14 @@ class RAGEvaluationEngine:
         """문서 검색"""
         try:
             top_k = retrieval_config.get('top_k', 5)
+            stage_strategy = retrieval_config.get('stage_strategy', 'basic')
             candidate_k = retrieval_config.get('candidate_k', max(top_k * 2, top_k))
-            if retrieval_config.get('use_reranker'):
-                n_results = max(candidate_k, top_k)
+            if stage_strategy == 'two-stage':
+                stage1_conf = retrieval_config.get('stage1', {})
+                stage_candidate = stage1_conf.get('candidate_k', candidate_k)
+                n_results = max(stage_candidate, candidate_k, top_k)
             else:
-                n_results = top_k
+                n_results = max(candidate_k, top_k)
             
             # 쿼리도 BGE-M3로 임베딩 (중요!)
             query_embedding = self.embedding_model.encode(
@@ -781,6 +838,11 @@ class RAGEvaluationEngine:
             
             if results and 'documents' in results and results['documents']:
                 documents = results['documents'][0][:n_results]
+                if stage_strategy == 'two-stage':
+                    return self._two_stage_pipeline(query, documents, retrieval_config, top_k)
+                if stage_strategy == 'ensemble':
+                    ensemble_cfg = retrieval_config.get('ensemble_rerankers', [])
+                    return self._ensemble_rerank_documents(query, documents, ensemble_cfg, top_k)
                 if retrieval_config.get('use_reranker'):
                     rerank_model = retrieval_config.get('rerank_model')
                     return self._rerank_documents(query, documents, rerank_model, top_k)

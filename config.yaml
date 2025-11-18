@@ -51,6 +51,31 @@ retrieval_configs:
     use_reranker: true
     rerank_model: "mixedbread-ai/mxbai-reranker-v1"
 
+  config_5:
+    name: "Single-Stage Ensemble (top_k=5)"
+    retrieval_type: "dense"
+    top_k: 5
+    candidate_k: 20
+    stage_strategy: "ensemble"
+    ensemble_rerankers:
+      - model: "mixedbread-ai/mxbai-reranker-v1"
+        weight: 0.6
+      - model: "BAAI/bge-reranker-large"
+        weight: 0.4
+
+  config_6:
+    name: "Two-Stage (top10→top5)"
+    retrieval_type: "dense"
+    top_k: 5
+    stage_strategy: "two-stage"
+    stage1:
+      candidate_k: 25
+      keep_k: 10
+      rerank_model: "mixedbread-ai/mxbai-reranker-v1"
+    stage2:
+      final_k: 5
+      rerank_model: "BAAI/bge-reranker-large"
+
 evaluation:
   sample_size: 10
   use_ragas: true
