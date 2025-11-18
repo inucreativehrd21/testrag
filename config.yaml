@@ -94,7 +94,10 @@ embedding:
   max_length: 1024
 
 llm:
+  provider: "openai"
   model_name: "gpt-4o"
+  api_key_env: "OPENAI_API_KEY"
+  api_base: null
   max_new_tokens: 256
   temperature: 0.2
   top_p: 0.9

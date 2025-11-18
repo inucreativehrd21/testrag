@@ -45,7 +45,7 @@ except ImportError:
     from langchain.text_splitter import RecursiveCharacterTextSplitter
 from FlagEmbedding import BGEM3FlagModel
 from sentence_transformers import CrossEncoder
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+from openai import OpenAI
 import chromadb
 
 # RAGAS (벤치마크)
@@ -141,9 +141,7 @@ class RAGEvaluationEngine:
         self.embedding_identifier = self.embedding_config.get('model_name', 'BAAI/bge-m3')
         self.chroma_client = chromadb.Client()
         self.llm_config = self.config.get('llm', {})
-        self.llm_pipeline = None
-        self.llm_tokenizer = None
-        self.llm_model = None
+        self.openai_client = None
         # 크롤링 데이터 로드
         self._load_crawled_data()
     
@@ -525,32 +523,30 @@ class RAGEvaluationEngine:
             )
         return stage1_docs[:final_k]
 
-    def _get_llm_pipeline(self):
-        """LLM 파이프라인 로드"""
-        if self.llm_pipeline is not None:
-            return self.llm_pipeline
-        model_name = self.llm_config.get('model_name', 'google/flan-t5-base')
-        logger.info(f"LLM 로드 중... ({model_name})")
+    def _get_llm_client(self) -> OpenAI:
+        """OpenAI LLM 클라이언트 로드"""
+        if self.openai_client is not None:
+            return self.openai_client
+        api_key_env = self.llm_config.get('api_key_env', 'OPENAI_API_KEY')
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise RuntimeError(f"LLM 사용을 위해 {api_key_env} 환경 변수를 설정하세요.")
+        api_base = self.llm_config.get('api_base')
         try:
-            self.llm_tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.llm_model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-            device = 0 if self.device == 'cuda' else -1
-            self.llm_pipeline = pipeline(
-                'text2text-generation',
-                model=self.llm_model,
-                tokenizer=self.llm_tokenizer,
-                device=device
-            )
-            logger.info("✓ LLM 로드 완료")
+            if api_base:
+                self.openai_client = OpenAI(api_key=api_key, base_url=api_base)
+            else:
+                self.openai_client = OpenAI(api_key=api_key)
+            logger.info("✓ OpenAI LLM 클라이언트 준비 완료")
         except Exception as e:
-            logger.warning(f"LLM 로드 실패: {e}")
-            self.llm_pipeline = None
-        return self.llm_pipeline
+            logger.error(f"OpenAI 클라이언트 초기화 실패: {e}")
+            raise
+        return self.openai_client
 
-    def _build_llm_prompt(self, query: str, contexts: List[str]) -> str:
-        """프롬프트 템플릿 구성"""
+    def _build_llm_prompt(self, query: str, contexts: List[str]) -> Tuple[str, str]:
+        """프롬프트 템플릿 구성 (system, user)"""
         system_prompt = (
-            "당신은 15년차 풀스택 엔지니어로서 개발 학습 도우미 멘토를 맡았습니다. "
+            "당신은 15년차 프롬프트 엔지니어로서 개발 학습 도우미 챗봇을 설계 중입니다. "
             "사용자의 질문에 대해 제공된 컨텍스트만으로 정확하고 간결한 답변을 작성하세요. "
             "추정하거나 근거 없는 내용을 포함하지 말고, 필요 시 '자료 부족'이라고 명시하세요."
         )
@@ -560,14 +556,13 @@ class RAGEvaluationEngine:
             "2. 단계가 필요한 절차는 번호 목록으로 설명합니다.\n"
             "3. Korean으로 답변하되, 코드나 명령어는 원문을 유지합니다."
         )
-        prompt = (
-            f"{system_prompt}\n\n"
+        user_prompt = (
             f"[컨텍스트]\n{context_section}\n\n"
             f"[질문]\n{query}\n\n"
             f"[답변 지침]\n{instructions}\n\n"
             "[최종 답변]"
         )
-        return prompt
+        return system_prompt, user_prompt
 
     def _generate_answer(self, query: str, retrieved_docs: List[str]) -> Tuple[str, str]:
         """LLM을 활용한 최종 답변 생성"""
@@ -575,26 +570,25 @@ class RAGEvaluationEngine:
             return "관련 정보를 찾을 수 없습니다.", ""
         max_docs = self.llm_config.get('max_context_docs', 3)
         context_subset = retrieved_docs[:max_docs]
-        prompt = self._build_llm_prompt(query, context_subset)
-        llm_pipe = self._get_llm_pipeline()
-        if llm_pipe is None:
-            return context_subset[0][:200], prompt
-        generation_kwargs = {
-            'max_new_tokens': self.llm_config.get('max_new_tokens', 256),
-            'temperature': self.llm_config.get('temperature', 0.2),
-            'top_p': self.llm_config.get('top_p', 0.9),
-            'do_sample': self.llm_config.get('temperature', 0.2) > 0
-        }
+        system_prompt, user_prompt = self._build_llm_prompt(query, context_subset)
+        combined_prompt = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
         try:
-            outputs = llm_pipe(prompt, **generation_kwargs)
-            if outputs and len(outputs) > 0:
-                answer = outputs[0]['generated_text'].strip()
-            else:
-                answer = context_subset[0][:200]
+            client = self._get_llm_client()
+            response = client.chat.completions.create(
+                model=self.llm_config.get('model_name', 'gpt-4o-mini'),
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=self.llm_config.get('temperature', 0.2),
+                top_p=self.llm_config.get('top_p', 0.9),
+                max_tokens=self.llm_config.get('max_new_tokens', 256)
+            )
+            answer = response.choices[0].message.content.strip()
         except Exception as e:
             logger.warning(f"LLM 답변 생성 실패: {e}")
             answer = context_subset[0][:200]
-        return answer, prompt
+        return answer, combined_prompt
     
     # ========================================================================
     # 3단계: 평가 실행
