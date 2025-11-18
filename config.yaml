@@ -67,6 +67,7 @@ retrieval_configs:
       - model: "jinaai/jina-reranker-v2-base-multilingual"
         weight: 0.2
         device: "cuda:1"
+        trust_remote_code: true
 
   config_6:
     name: "Two-Stage (top10→top5)"
@@ -82,6 +83,7 @@ retrieval_configs:
       final_k: 5
       rerank_model: "jinaai/jina-reranker-v2-base-multilingual"
       rerank_device: "cuda:1"
+      rerank_trust_remote_code: true
 
 evaluation:
   sample_size: 10

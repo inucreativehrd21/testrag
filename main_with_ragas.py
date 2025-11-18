@@ -441,25 +441,30 @@ class RAGEvaluationEngine:
         logger.info(f"✓ 벡터DB 캐시 생성: {chunking_config['name']}")
         return collection
 
-    def _get_reranker(self, model_name: str, device_name: str = None):
+    def _get_reranker(self, model_name: str, device_name: str = None,
+                      trust_remote_code: bool = False):
         """리랭커 모델 캐시"""
         if not model_name:
             return None
         device_name = device_name or self.device
-        cache_key = (model_name, device_name)
+        cache_key = (model_name, device_name, trust_remote_code)
         if cache_key not in self.reranker_models:
-            logger.info(f"리랭커 모델 로드 중... ({model_name}) [device={device_name}]")
+            logger.info(
+                f"리랭커 모델 로드 중... ({model_name}) [device={device_name}, trust_remote_code={trust_remote_code}]"
+            )
             self.reranker_models[cache_key] = CrossEncoder(
                 model_name,
-                device=device_name
+                device=device_name,
+                trust_remote_code=trust_remote_code
             )
             logger.info("✓ 리랭커 로드 완료")
         return self.reranker_models[cache_key]
 
     def _rerank_documents(self, query: str, documents: List[str], rerank_model: str,
-                          top_k: int, device_name: str = None) -> List[str]:
+                          top_k: int, device_name: str = None,
+                          trust_remote_code: bool = False) -> List[str]:
         """CrossEncoder 기반 리랭킹"""
-        reranker = self._get_reranker(rerank_model, device_name)
+        reranker = self._get_reranker(rerank_model, device_name, trust_remote_code)
         if reranker is None or not documents:
             return documents
         pairs = [[query, doc] for doc in documents]
@@ -483,7 +488,8 @@ class RAGEvaluationEngine:
             model_name = rerank_def.get('model') or rerank_def.get('rerank_model')
             weight = rerank_def.get('weight', 1.0)
             device_name = rerank_def.get('device')
-            reranker = self._get_reranker(model_name, device_name)
+            trust_remote = rerank_def.get('trust_remote_code', False)
+            reranker = self._get_reranker(model_name, device_name, trust_remote)
             if reranker is None:
                 continue
             try:
@@ -513,7 +519,8 @@ class RAGEvaluationEngine:
                 stage1_docs,
                 stage1_conf.get('rerank_model'),
                 keep_k,
-                stage1_conf.get('rerank_device')
+                stage1_conf.get('rerank_device'),
+                stage1_conf.get('rerank_trust_remote_code', False)
             )
         else:
             stage1_docs = stage1_docs[:keep_k]
@@ -524,7 +531,8 @@ class RAGEvaluationEngine:
                 stage1_docs,
                 stage2_conf.get('rerank_model'),
                 final_k,
-                stage2_conf.get('rerank_device')
+                stage2_conf.get('rerank_device'),
+                stage2_conf.get('rerank_trust_remote_code', False)
             )
         return stage1_docs[:final_k]
 
@@ -971,7 +979,15 @@ class RAGEvaluationEngine:
                 if retrieval_config.get('use_reranker'):
                     rerank_model = retrieval_config.get('rerank_model')
                     rerank_device = retrieval_config.get('rerank_device')
-                    return self._rerank_documents(query, documents, rerank_model, top_k, rerank_device)
+                    rerank_trust = retrieval_config.get('rerank_trust_remote_code', False)
+                    return self._rerank_documents(
+                        query,
+                        documents,
+                        rerank_model,
+                        top_k,
+                        rerank_device,
+                        rerank_trust
+                    )
                 return documents[:top_k]
             
             return []
