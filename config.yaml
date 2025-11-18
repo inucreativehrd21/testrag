@@ -64,7 +64,7 @@ retrieval_configs:
       - model: "BAAI/bge-reranker-v2-m3"
         weight: 0.4
         device: "cuda:0"
-      - model: "Qwen3-Reranker-8B"
+      - model: "jinaai/jina-reranker-v2-base-multilingual"
         weight: 0.2
         device: "cuda:1"
 
@@ -80,7 +80,7 @@ retrieval_configs:
       rerank_device: "cuda:0"
     stage2:
       final_k: 5
-      rerank_model: "Qwen3-Reranker-8B"
+      rerank_model: "jinaai/jina-reranker-v2-base-multilingual"
       rerank_device: "cuda:1"
 
 evaluation:
