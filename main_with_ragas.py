@@ -554,16 +554,7 @@ class RAGEvaluationEngine:
                 device=device_name,
                 trust_remote_code=trust_remote_code
             )
-            tokenizer = getattr(reranker, 'tokenizer', None)
-            if tokenizer is not None and tokenizer.pad_token is None:
-                if tokenizer.eos_token is not None:
-                    tokenizer.pad_token = tokenizer.eos_token
-                else:
-                    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-                    if hasattr(reranker.model, 'resize_token_embeddings'):
-                        reranker.model.resize_token_embeddings(len(tokenizer))
-                tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-                tokenizer.padding_side = 'right'
+            self._ensure_tokenizer_padding(reranker)
             self.reranker_models[cache_key] = reranker
             logger.info("✓ 리랭커 로드 완료")
         return self.reranker_models[cache_key]
@@ -650,6 +641,23 @@ class RAGEvaluationEngine:
             raw_scores = raw_scores.detach().cpu()
         return np.asarray(raw_scores, dtype=np.float32)
 
+    def _ensure_tokenizer_padding(self, reranker):
+        tokenizer = getattr(reranker, 'tokenizer', None)
+        if tokenizer is None:
+            return
+        if getattr(tokenizer, 'pad_token', None) is not None:
+            return
+        if tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        else:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            if hasattr(reranker.model, 'resize_token_embeddings'):
+                reranker.model.resize_token_embeddings(len(tokenizer))
+        tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+        tokenizer.padding_side = 'right'
+        if hasattr(reranker.model, 'config'):
+            reranker.model.config.pad_token_id = tokenizer.pad_token_id
+
     def _batched_reranker_predict(self, reranker, pairs: List[List[str]]) -> List[float]:
         if not pairs:
             return []
@@ -657,6 +665,7 @@ class RAGEvaluationEngine:
         scores: List[float] = []
         for start in range(0, len(pairs), batch_size):
             batch_pairs = pairs[start:start + batch_size]
+            self._ensure_tokenizer_padding(reranker)
             raw = reranker.predict(batch_pairs)
             formatted = self._format_reranker_scores(raw)
             scores.extend(formatted.tolist())
