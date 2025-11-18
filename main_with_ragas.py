@@ -685,6 +685,9 @@ class RAGEvaluationEngine:
             
             # LLM 답변 생성
             llm_answer, llm_prompt = self._generate_answer(query, retrieved_docs)
+            llm_answer = (llm_answer or "").strip()
+            if not llm_answer:
+                llm_answer = "관련 정보를 찾을 수 없습니다."
             
             # 기본 메트릭
             result = {
@@ -705,7 +708,7 @@ class RAGEvaluationEngine:
             }
             
             # 6. RAGAS 평가 (선택사항)
-            if self.use_ragas and retrieved_docs:
+            if self.use_ragas and retrieved_docs and llm_answer.strip():
                 ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, llm_answer)
                 result.update(ragas_metrics)
             
