@@ -441,23 +441,25 @@ class RAGEvaluationEngine:
         logger.info(f"✓ 벡터DB 캐시 생성: {chunking_config['name']}")
         return collection
 
-    def _get_reranker(self, model_name: str):
+    def _get_reranker(self, model_name: str, device_name: str = None):
         """리랭커 모델 캐시"""
         if not model_name:
             return None
-        if model_name not in self.reranker_models:
-            logger.info(f"리랭커 모델 로드 중... ({model_name})")
-            self.reranker_models[model_name] = CrossEncoder(
+        device_name = device_name or self.device
+        cache_key = (model_name, device_name)
+        if cache_key not in self.reranker_models:
+            logger.info(f"리랭커 모델 로드 중... ({model_name}) [device={device_name}]")
+            self.reranker_models[cache_key] = CrossEncoder(
                 model_name,
-                device=self.device
+                device=device_name
             )
             logger.info("✓ 리랭커 로드 완료")
-        return self.reranker_models[model_name]
+        return self.reranker_models[cache_key]
 
     def _rerank_documents(self, query: str, documents: List[str], rerank_model: str,
-                          top_k: int) -> List[str]:
+                          top_k: int, device_name: str = None) -> List[str]:
         """CrossEncoder 기반 리랭킹"""
-        reranker = self._get_reranker(rerank_model)
+        reranker = self._get_reranker(rerank_model, device_name)
         if reranker is None or not documents:
             return documents
         pairs = [[query, doc] for doc in documents]
@@ -480,7 +482,8 @@ class RAGEvaluationEngine:
         for rerank_def in ensemble_config:
             model_name = rerank_def.get('model') or rerank_def.get('rerank_model')
             weight = rerank_def.get('weight', 1.0)
-            reranker = self._get_reranker(model_name)
+            device_name = rerank_def.get('device')
+            reranker = self._get_reranker(model_name, device_name)
             if reranker is None:
                 continue
             try:
@@ -509,7 +512,8 @@ class RAGEvaluationEngine:
                 query,
                 stage1_docs,
                 stage1_conf.get('rerank_model'),
-                keep_k
+                keep_k,
+                stage1_conf.get('rerank_device')
             )
         else:
             stage1_docs = stage1_docs[:keep_k]
@@ -519,7 +523,8 @@ class RAGEvaluationEngine:
                 query,
                 stage1_docs,
                 stage2_conf.get('rerank_model'),
-                final_k
+                final_k,
+                stage2_conf.get('rerank_device')
             )
         return stage1_docs[:final_k]
 
@@ -965,7 +970,8 @@ class RAGEvaluationEngine:
                     return self._ensemble_rerank_documents(query, documents, ensemble_cfg, top_k)
                 if retrieval_config.get('use_reranker'):
                     rerank_model = retrieval_config.get('rerank_model')
-                    return self._rerank_documents(query, documents, rerank_model, top_k)
+                    rerank_device = retrieval_config.get('rerank_device')
+                    return self._rerank_documents(query, documents, rerank_model, top_k, rerank_device)
                 return documents[:top_k]
             
             return []

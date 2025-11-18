@@ -60,10 +60,13 @@ retrieval_configs:
     ensemble_rerankers:
       - model: "BAAI/bge-reranker-large"
         weight: 0.4
+        device: "cuda:0"
       - model: "BAAI/bge-reranker-v2-m3"
         weight: 0.4
-      - model: "deepset/kr-reranker-electra"
+        device: "cuda:0"
+      - model: "Qwen3-Reranker-8B"
         weight: 0.2
+        device: "cuda:1"
 
   config_6:
     name: "Two-Stage (top10→top5)"
@@ -74,9 +77,11 @@ retrieval_configs:
       candidate_k: 25
       keep_k: 10
       rerank_model: "BAAI/bge-reranker-v2-m3"
+      rerank_device: "cuda:0"
     stage2:
       final_k: 5
-      rerank_model: "deepset/kr-reranker-electra"
+      rerank_model: "Qwen3-Reranker-8B"
+      rerank_device: "cuda:1"
 
 evaluation:
   sample_size: 10
