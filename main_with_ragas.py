@@ -572,6 +572,7 @@ class RAGEvaluationEngine:
         context_subset = retrieved_docs[:max_docs]
         system_prompt, user_prompt = self._build_llm_prompt(query, context_subset)
         combined_prompt = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
+        fallback_answer = context_subset[0][:200]
         try:
             client = self._get_llm_client()
             response = client.chat.completions.create(
@@ -584,10 +585,21 @@ class RAGEvaluationEngine:
                 top_p=self.llm_config.get('top_p', 0.9),
                 max_tokens=self.llm_config.get('max_new_tokens', 256)
             )
-            answer = response.choices[0].message.content.strip()
+            choice = response.choices[0]
+            message_content = choice.message.content
+            if isinstance(message_content, list):
+                # OpenAI 응답이 조각 리스트인 경우 문자열로 병합
+                message_content = "\n".join(
+                    segment.get('text', '') if isinstance(segment, dict) else str(segment)
+                    for segment in message_content
+                )
+            answer = (message_content or "").strip()
+            if not answer:
+                logger.warning("LLM 응답이 비어 있어 기본 컨텍스트로 대체합니다.")
+                answer = fallback_answer
         except Exception as e:
             logger.warning(f"LLM 답변 생성 실패: {e}")
-            answer = context_subset[0][:200]
+            answer = fallback_answer
         return answer, combined_prompt
     
     # ========================================================================
