@@ -25,6 +25,7 @@ import json
 import yaml
 import logging
 import argparse
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Tuple
@@ -43,6 +44,7 @@ except ImportError:
     # LangChain 0.0.x 호환
     from langchain.text_splitter import RecursiveCharacterTextSplitter
 from FlagEmbedding import BGEM3FlagModel
+from sentence_transformers import CrossEncoder
 import chromadb
 
 # RAGAS (벤치마크)
@@ -97,10 +99,14 @@ class RAGEvaluationEngine:
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
         
-        # RAGAS 설정
-        self.use_ragas = use_ragas and RAGAS_AVAILABLE
-        if use_ragas and not RAGAS_AVAILABLE:
+        eval_config = self.config.get('evaluation', {})
+        config_wants_ragas = eval_config.get('use_ragas', True)
+        requested_ragas = use_ragas and config_wants_ragas
+        self.use_ragas = requested_ragas and RAGAS_AVAILABLE
+        if requested_ragas and not RAGAS_AVAILABLE:
             logger.warning("RAGAS를 사용할 수 없습니다. 기본 메트릭만 사용됩니다.")
+        if not requested_ragas:
+            logger.warning("설정상 RAGAS가 비활성화되어 벤치마크 신뢰도가 낮아질 수 있습니다.")
         
         # 디바이스 확인
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -127,6 +133,12 @@ class RAGEvaluationEngine:
         self.results_dir.mkdir(exist_ok=True)
         
         self.embedding_model = None
+        self.reranker_models = {}
+        self.chunk_cache: Dict[str, List[str]] = {}
+        self.collection_cache: Dict[Tuple[str, str], chromadb.Collection] = {}
+        self.embedding_config = self.config.get('embedding', {})
+        self.embedding_identifier = self.embedding_config.get('model_name', 'BAAI/bge-m3')
+        self.chroma_client = chromadb.Client()
         # 크롤링 데이터 로드
         self._load_crawled_data()
     
@@ -287,9 +299,9 @@ class RAGEvaluationEngine:
         logger.info(f"2단계: 테스트 쿼리 생성")
         logger.info(f"{'='*70}")
         
-        queries = []
+        basic_queries = []
+        advanced_queries = []
         
-        # 도메인별 쿼리
         domain_queries = {
             'git': [
                 "Git의 주요 명령어는 무엇인가?",
@@ -323,21 +335,136 @@ class RAGEvaluationEngine:
             ]
         }
         
-        # 로드된 도메인에 맞는 쿼리 추가
+        advanced_domain_queries = {
+            'git': [
+                "여러 팀이 동시에 작업하는 저장소에서 Git flow와 trunk 기반 전략을 어떻게 조합하면 충돌을 줄일 수 있을까?",
+                "서브모듈과 서브트리 전략을 비교하고, 수백 개 마이크로서비스 저장소를 통합 관리할 때 어떤 접근을 취해야 할까?"
+            ],
+            'python': [
+                "대규모 Python 서비스에서 패키지 버전 충돌과 가상환경 관리를 자동화하려면 어떤 빌드/배포 파이프라인이 필요할까?",
+                "데이터 과학 워크로드와 웹 백엔드가 공존할 때 공용 라이브러리의 호환성을 유지하는 방법은?"
+            ],
+            'docker': [
+                "GPU가 필요한 학습 파이프라인과 CPU 위주의 API 서버를 동일 클러스터에서 운영할 때 Docker 리소스 제약을 어떻게 설계해야 할까?",
+                "대규모 이미지 빌드를 최적화하고 취약점 스캔을 자동화하기 위한 CI/CD 파이프라인 구성은?"
+            ],
+            'aws': [
+                "AWS 상에서 멀티 AZ/Region 아키텍처를 구성할 때 트래픽 라우팅과 데이터 일관성을 동시에 확보하려면?",
+                "대규모 S3 데이터 레이크를 운영하며 권한분리와 비용 최적화를 달성하기 위한 구체적 전략은?"
+            ],
+            'kubernetes': [
+                "Kubernetes에서 StatefulSet과 Operator를 활용해 고가용성 DB를 구성할 때 주의할 장애 시나리오는?",
+                "수천 개의 Pod가 있는 클러스터에서 HPA와 VPA를 동시에 운용하며 메모리 스파이크를 완화하는 방법은?"
+            ]
+        }
+        
+        general_basic = ["주요 개념", "사용 방법", "장점"]
+        general_advanced = [
+            "실제 장애 상황을 가정하고 근본 원인 분석부터 복구까지의 절차를 설명해줘.",
+            "기존 레거시 시스템과 연동하면서 발생하는 병목과 이를 완화하는 설계 패턴은 무엇일까?"
+        ]
+        
         for domain in self.crawled_documents.keys():
             if domain in domain_queries:
-                queries.extend(domain_queries[domain])
+                basic_queries.extend(domain_queries[domain])
             else:
-                queries.append(f"{domain}의 주요 개념은?")
-                queries.append(f"{domain} 사용 방법")
+                basic_queries.append(f"{domain}의 주요 개념은?")
+                basic_queries.append(f"{domain} 사용 방법")
+            
+            if domain in advanced_domain_queries:
+                advanced_queries.extend(advanced_domain_queries[domain])
+            else:
+                advanced_queries.append(f"{domain}을(를) 기존 인프라에 통합할 때 예상되는 병목과 해결 전략은?")
+                advanced_queries.append(f"{domain} 기반 서비스를 장애 허용 아키텍처로 설계하려면?")
         
-        if not queries:
-            queries = ["주요 개념", "사용 방법", "장점"]
+        if not basic_queries:
+            basic_queries = general_basic.copy()
+        if not advanced_queries:
+            advanced_queries = general_advanced.copy()
         
-        self.test_queries = queries[:self.config['evaluation'].get('sample_size', 5)]
+        merged_queries = []
+        basic_idx = 0
+        advanced_idx = 0
+        while basic_idx < len(basic_queries) or advanced_idx < len(advanced_queries):
+            if advanced_idx < len(advanced_queries):
+                merged_queries.append(advanced_queries[advanced_idx])
+                advanced_idx += 1
+            if basic_idx < len(basic_queries):
+                merged_queries.append(basic_queries[basic_idx])
+                basic_idx += 1
+        
+        sample_size = self.config['evaluation'].get('sample_size', 5)
+        self.test_queries = merged_queries[:sample_size]
         logger.info(f"✓ {len(self.test_queries)}개 쿼리 생성")
         for i, q in enumerate(self.test_queries, 1):
             logger.info(f"  {i}. {q}")
+
+    def _collection_cache_key(self, chunking_name: str) -> Tuple[str, str]:
+        """청킹 전략 + 임베딩 모델 조합 키"""
+        return (chunking_name, self.embedding_identifier)
+
+    def _format_collection_name(self, chunking_name: str) -> str:
+        """Chroma 컬렉션명 안전 변환"""
+        chunk_safe = re.sub(r'[^a-zA-Z0-9_-]+', '_', chunking_name)
+        embed_safe = re.sub(r'[^a-zA-Z0-9_-]+', '_', self.embedding_identifier)
+        return f"rag_eval_{chunk_safe}_{embed_safe}"
+
+    def _get_chunks_for_strategy(self, chunking_name: str, chunking_config: Dict,
+                                 text: str) -> List[str]:
+        """청킹 전략별 청크 생성 (1회)"""
+        if chunking_name not in self.chunk_cache:
+            chunks = self._chunk_text(
+                text,
+                chunking_config['chunk_size'],
+                chunking_config['chunk_overlap']
+            )
+            self.chunk_cache[chunking_name] = chunks
+            logger.info(f"✓ 청킹 캐시 생성: {chunking_config['name']} ({len(chunks)}개 청크)")
+        return self.chunk_cache[chunking_name]
+
+    def _get_collection_for_strategy(self, chunking_name: str, chunking_config: Dict,
+                                     chunks: List[str]) -> chromadb.Collection:
+        """청킹+임베딩 조합별 벡터 DB 생성 (1회)"""
+        cache_key = self._collection_cache_key(chunking_name)
+        if cache_key in self.collection_cache:
+            return self.collection_cache[cache_key]
+        dense_embed, _ = self._embed_chunks(chunks)
+        collection = self._build_vectordb(
+            chunks,
+            dense_embed,
+            collection_name=self._format_collection_name(chunking_name)
+        )
+        self.collection_cache[cache_key] = collection
+        logger.info(f"✓ 벡터DB 캐시 생성: {chunking_config['name']}")
+        return collection
+
+    def _get_reranker(self, model_name: str):
+        """리랭커 모델 캐시"""
+        if not model_name:
+            return None
+        if model_name not in self.reranker_models:
+            logger.info(f"리랭커 모델 로드 중... ({model_name})")
+            self.reranker_models[model_name] = CrossEncoder(
+                model_name,
+                device=self.device
+            )
+            logger.info("✓ 리랭커 로드 완료")
+        return self.reranker_models[model_name]
+
+    def _rerank_documents(self, query: str, documents: List[str], rerank_model: str,
+                          top_k: int) -> List[str]:
+        """CrossEncoder 기반 리랭킹"""
+        reranker = self._get_reranker(rerank_model)
+        if reranker is None or not documents:
+            return documents
+        pairs = [[query, doc] for doc in documents]
+        try:
+            scores = reranker.predict(pairs)
+            ranked = [doc for _, doc in sorted(zip(scores, documents), reverse=True)]
+            return ranked[:top_k]
+        except Exception as e:
+            logger.warning(f"리랭킹 실패: {e}")
+            return documents[:top_k]
     
     # ========================================================================
     # 3단계: 평가 실행
@@ -377,13 +504,20 @@ class RAGEvaluationEngine:
         
         # 모든 조합 평가
         for chunking_name, chunking_config in self.config['chunking_strategies'].items():
+            chunks = self._get_chunks_for_strategy(chunking_name, chunking_config, all_text)
+            if not chunks:
+                logger.warning(f"청크 생성 실패: {chunking_config['name']}")
+                continue
+            collection = self._get_collection_for_strategy(chunking_name, chunking_config, chunks)
             for retrieval_name, retrieval_config in self.config['retrieval_configs'].items():
                 for query in self.test_queries:
                     result = self._evaluate_single(
-                        all_text,
+                        chunks,
+                        collection,
                         chunking_config,
                         retrieval_config,
-                        query
+                        query,
+                        all_text
                     )
                     
                     if result:
@@ -402,30 +536,18 @@ class RAGEvaluationEngine:
                 all_texts.append(f"[{domain.upper()}]\n{text}")
         return "\n\n".join(all_texts)
     
-    def _evaluate_single(self, text: str, chunking_config: Dict,
-                        retrieval_config: Dict, query: str) -> Dict:
-        """단일 조합 평가 (기본 메트릭)"""
+    def _evaluate_single(self, chunks: List[str], collection: chromadb.Collection,
+                        chunking_config: Dict, retrieval_config: Dict,
+                        query: str, context_text: str) -> Dict:
+        """단일 조합 평가 (청킹/임베딩 재사용 버전)"""
         try:
-            # 1. 청킹
-            chunks = self._chunk_text(
-                text,
-                chunking_config['chunk_size'],
-                chunking_config['chunk_overlap']
-            )
-            
             if not chunks:
                 return None
             
-            # 2. 임베딩
-            dense_embed, sparse_embed = self._embed_chunks(chunks)
-            
-            # 3. 벡터DB
-            collection = self._build_vectordb(chunks, dense_embed)
-            
-            # 4. 검색
+            # 검색
             retrieved_docs = self._retrieve(query, collection, retrieval_config)
             
-            # 5. 기본 메트릭
+            # 기본 메트릭
             result = {
                 'chunking_strategy': chunking_config['name'],
                 'chunk_size': chunking_config['chunk_size'],
@@ -443,7 +565,7 @@ class RAGEvaluationEngine:
             
             # 6. RAGAS 평가 (선택사항)
             if self.use_ragas and retrieved_docs:
-                ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, text)
+                ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, context_text)
                 result.update(ragas_metrics)
             
             return result
@@ -548,16 +670,19 @@ class RAGEvaluationEngine:
         try:
             # 모델 캐시
             if self.embedding_model is None:
-                logger.info("BGE-M3 모델 로드 중...")
+                model_name = self.embedding_config.get('model_name', 'BAAI/bge-m3')
+                use_fp16 = self.embedding_config.get('use_fp16', True)
+                logger.info(f"임베딩 모델 로드 중... ({model_name})")
                 self.embedding_model = BGEM3FlagModel(
-                    'BAAI/bge-m3',
-                    use_fp16=True,
+                    model_name,
+                    use_fp16=use_fp16,
                     device=self.device
                 )
-                logger.info("✓ BGE-M3 모델 로드 완료")
+                logger.info("✓ 임베딩 모델 로드 완료")
             
             # 동적 배치 크기 (모든 경로에서 정의)
             num_chunks = len(chunks)
+            default_batch = self.embedding_config.get('batch_size', 32)
             
             if num_chunks > 10000:
                 batch_size = 4
@@ -566,13 +691,13 @@ class RAGEvaluationEngine:
             elif num_chunks > 1000:
                 batch_size = 16
             else:
-                batch_size = 32  # ← 반드시 모든 경로에서 정의
+                batch_size = default_batch  # ← 반드시 모든 경로에서 정의
             
             # 임베딩 실행
             embeddings = self.embedding_model.encode(
                 chunks,
                 batch_size=batch_size,  # ← 이제 항상 정의됨
-                max_length=512,
+                max_length=self.embedding_config.get('max_length', 512),
                 return_dense=True,
                 return_sparse=True,
             )
@@ -584,17 +709,16 @@ class RAGEvaluationEngine:
             raise
 
     
-    def _build_vectordb(self, chunks: List[str], embeddings: np.ndarray) -> chromadb.Collection:
+    def _build_vectordb(self, chunks: List[str], embeddings: np.ndarray,
+                        collection_name: str) -> chromadb.Collection:
         """ChromaDB 구축 (배치 크기 제한 해결)"""
         try:
-            client = chromadb.Client()
-            
             try:
-                client.delete_collection(name="rag_eval")
-            except:
+                self.chroma_client.delete_collection(name=collection_name)
+            except Exception:
                 pass
             
-            collection = client.get_or_create_collection(name="rag_eval")
+            collection = self.chroma_client.get_or_create_collection(name=collection_name)
             
             # ChromaDB 최대 배치 크기: 41666
             # 안전 마진: 30000
@@ -634,12 +758,17 @@ class RAGEvaluationEngine:
         """문서 검색"""
         try:
             top_k = retrieval_config.get('top_k', 5)
+            candidate_k = retrieval_config.get('candidate_k', max(top_k * 2, top_k))
+            if retrieval_config.get('use_reranker'):
+                n_results = max(candidate_k, top_k)
+            else:
+                n_results = top_k
             
             # 쿼리도 BGE-M3로 임베딩 (중요!)
             query_embedding = self.embedding_model.encode(
                 [query],
                 batch_size=1,
-                max_length=512,
+                max_length=self.embedding_config.get('max_length', 512),
                 return_dense=True,
                 return_sparse=False
             )['dense_vecs'].tolist()
@@ -647,11 +776,15 @@ class RAGEvaluationEngine:
             # 임베딩된 쿼리로 검색
             results = collection.query(
                 query_embeddings=query_embedding,
-                n_results=top_k
+                n_results=n_results
             )
             
             if results and 'documents' in results and results['documents']:
-                return results['documents'][0][:top_k]
+                documents = results['documents'][0][:n_results]
+                if retrieval_config.get('use_reranker'):
+                    rerank_model = retrieval_config.get('rerank_model')
+                    return self._rerank_documents(query, documents, rerank_model, top_k)
+                return documents[:top_k]
             
             return []
         

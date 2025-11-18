@@ -47,12 +47,13 @@ retrieval_configs:
     name: "Dense + Reranker (top_k=10)"
     retrieval_type: "dense"
     top_k: 10
+    candidate_k: 20
     use_reranker: true
     rerank_model: "mixedbread-ai/mxbai-reranker-v1"
 
 evaluation:
-  sample_size: 5
-  use_ragas: false
+  sample_size: 10
+  use_ragas: true
   metrics:
     - context_precision
     - context_recall
