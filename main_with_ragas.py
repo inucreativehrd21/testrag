@@ -470,6 +470,7 @@ class RAGEvaluationEngine:
         pairs = [[query, doc] for doc in documents]
         try:
             scores = reranker.predict(pairs)
+            scores = np.asarray(scores, dtype=np.float32).tolist()
             ranked = [doc for _, doc in sorted(zip(scores, documents), reverse=True)]
             return ranked[:top_k]
         except Exception as e:
@@ -493,7 +494,7 @@ class RAGEvaluationEngine:
             if reranker is None:
                 continue
             try:
-                scores = np.array(reranker.predict(pairs))
+                scores = np.asarray(reranker.predict(pairs), dtype=np.float32)
                 scores_total += weight * scores
                 valid_models += 1
             except Exception as e:
