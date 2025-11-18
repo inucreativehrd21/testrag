@@ -3,6 +3,7 @@ torchvision==0.23.0
 torchaudio==2.8.0
 numpy==1.26.4
 pandas==2.2.2
+peft<=0.9.0
 scipy==1.13.0
 transformers==4.40.0
 sentence-transformers==2.7.0
@@ -29,4 +30,5 @@ loguru==0.7.2
 typing-extensions==4.11.0
 huggingface-hub==0.22.2
 safetensors==0.4.3
-accelerate==0.29.3
+accelerate==1.11.0
+hf_transfer

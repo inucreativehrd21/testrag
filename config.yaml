@@ -49,7 +49,7 @@ retrieval_configs:
     top_k: 10
     candidate_k: 20
     use_reranker: true
-    rerank_model: "mixedbread-ai/mxbai-reranker-v1"
+    rerank_model: "BAAI/bge-reranker-v2-m3"
 
   config_5:
     name: "Single-Stage Ensemble (top_k=5)"
@@ -58,10 +58,12 @@ retrieval_configs:
     candidate_k: 20
     stage_strategy: "ensemble"
     ensemble_rerankers:
-      - model: "mixedbread-ai/mxbai-reranker-v1"
-        weight: 0.6
       - model: "BAAI/bge-reranker-large"
         weight: 0.4
+      - model: "BAAI/bge-reranker-v2-m3"
+        weight: 0.4
+      - model: "deepset/kr-reranker-electra"
+        weight: 0.2
 
   config_6:
     name: "Two-Stage (top10→top5)"
@@ -71,10 +73,10 @@ retrieval_configs:
     stage1:
       candidate_k: 25
       keep_k: 10
-      rerank_model: "mixedbread-ai/mxbai-reranker-v1"
+      rerank_model: "BAAI/bge-reranker-v2-m3"
     stage2:
       final_k: 5
-      rerank_model: "BAAI/bge-reranker-large"
+      rerank_model: "deepset/kr-reranker-electra"
 
 evaluation:
   sample_size: 10
