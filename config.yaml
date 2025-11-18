@@ -92,3 +92,10 @@ embedding:
   use_fp16: true
   batch_size: 32
   max_length: 1024
+
+llm:
+  model_name: "gpt-4o"
+  max_new_tokens: 256
+  temperature: 0.2
+  top_p: 0.9
+  max_context_docs: 3

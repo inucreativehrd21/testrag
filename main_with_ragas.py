@@ -45,6 +45,7 @@ except ImportError:
     from langchain.text_splitter import RecursiveCharacterTextSplitter
 from FlagEmbedding import BGEM3FlagModel
 from sentence_transformers import CrossEncoder
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import chromadb
 
 # RAGAS (벤치마크)
@@ -139,6 +140,10 @@ class RAGEvaluationEngine:
         self.embedding_config = self.config.get('embedding', {})
         self.embedding_identifier = self.embedding_config.get('model_name', 'BAAI/bge-m3')
         self.chroma_client = chromadb.Client()
+        self.llm_config = self.config.get('llm', {})
+        self.llm_pipeline = None
+        self.llm_tokenizer = None
+        self.llm_model = None
         # 크롤링 데이터 로드
         self._load_crawled_data()
     
@@ -519,6 +524,77 @@ class RAGEvaluationEngine:
                 final_k
             )
         return stage1_docs[:final_k]
+
+    def _get_llm_pipeline(self):
+        """LLM 파이프라인 로드"""
+        if self.llm_pipeline is not None:
+            return self.llm_pipeline
+        model_name = self.llm_config.get('model_name', 'google/flan-t5-base')
+        logger.info(f"LLM 로드 중... ({model_name})")
+        try:
+            self.llm_tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.llm_model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+            device = 0 if self.device == 'cuda' else -1
+            self.llm_pipeline = pipeline(
+                'text2text-generation',
+                model=self.llm_model,
+                tokenizer=self.llm_tokenizer,
+                device=device
+            )
+            logger.info("✓ LLM 로드 완료")
+        except Exception as e:
+            logger.warning(f"LLM 로드 실패: {e}")
+            self.llm_pipeline = None
+        return self.llm_pipeline
+
+    def _build_llm_prompt(self, query: str, contexts: List[str]) -> str:
+        """프롬프트 템플릿 구성"""
+        system_prompt = (
+            "당신은 15년차 풀스택 엔지니어로서 개발 학습 도우미 멘토를 맡았습니다. "
+            "사용자의 질문에 대해 제공된 컨텍스트만으로 정확하고 간결한 답변을 작성하세요. "
+            "추정하거나 근거 없는 내용을 포함하지 말고, 필요 시 '자료 부족'이라고 명시하세요."
+        )
+        context_section = "\n\n".join([f"- {ctx.strip()}" for ctx in contexts])
+        instructions = (
+            "1. 컨텍스트에서 확인된 사실만 답변에 포함합니다.\n"
+            "2. 단계가 필요한 절차는 번호 목록으로 설명합니다.\n"
+            "3. Korean으로 답변하되, 코드나 명령어는 원문을 유지합니다."
+        )
+        prompt = (
+            f"{system_prompt}\n\n"
+            f"[컨텍스트]\n{context_section}\n\n"
+            f"[질문]\n{query}\n\n"
+            f"[답변 지침]\n{instructions}\n\n"
+            "[최종 답변]"
+        )
+        return prompt
+
+    def _generate_answer(self, query: str, retrieved_docs: List[str]) -> Tuple[str, str]:
+        """LLM을 활용한 최종 답변 생성"""
+        if not retrieved_docs:
+            return "관련 정보를 찾을 수 없습니다.", ""
+        max_docs = self.llm_config.get('max_context_docs', 3)
+        context_subset = retrieved_docs[:max_docs]
+        prompt = self._build_llm_prompt(query, context_subset)
+        llm_pipe = self._get_llm_pipeline()
+        if llm_pipe is None:
+            return context_subset[0][:200], prompt
+        generation_kwargs = {
+            'max_new_tokens': self.llm_config.get('max_new_tokens', 256),
+            'temperature': self.llm_config.get('temperature', 0.2),
+            'top_p': self.llm_config.get('top_p', 0.9),
+            'do_sample': self.llm_config.get('temperature', 0.2) > 0
+        }
+        try:
+            outputs = llm_pipe(prompt, **generation_kwargs)
+            if outputs and len(outputs) > 0:
+                answer = outputs[0]['generated_text'].strip()
+            else:
+                answer = context_subset[0][:200]
+        except Exception as e:
+            logger.warning(f"LLM 답변 생성 실패: {e}")
+            answer = context_subset[0][:200]
+        return answer, prompt
     
     # ========================================================================
     # 3단계: 평가 실행
@@ -601,6 +677,9 @@ class RAGEvaluationEngine:
             # 검색
             retrieved_docs = self._retrieve(query, collection, retrieval_config)
             
+            # LLM 답변 생성
+            llm_answer, llm_prompt = self._generate_answer(query, retrieved_docs)
+            
             # 기본 메트릭
             result = {
                 'chunking_strategy': chunking_config['name'],
@@ -614,12 +693,14 @@ class RAGEvaluationEngine:
                 'retrieved_count': len(retrieved_docs),
                 'retrieval_score': len(retrieved_docs) / len(chunks) if chunks else 0,
                 'retrieved_text': " ".join(retrieved_docs),  # RAGAS용
+                'llm_answer': llm_answer,
+                'llm_prompt': llm_prompt,
                 'timestamp': datetime.now().isoformat()
             }
             
             # 6. RAGAS 평가 (선택사항)
             if self.use_ragas and retrieved_docs:
-                ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, context_text)
+                ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, llm_answer)
                 result.update(ragas_metrics)
             
             return result
@@ -628,7 +709,7 @@ class RAGEvaluationEngine:
             logger.warning(f"평가 오류: {e}")
             return None
     
-    def _evaluate_with_ragas(self, query: str, retrieved_docs: List[str], context: str) -> Dict:
+    def _evaluate_with_ragas(self, query: str, retrieved_docs: List[str], answer: str) -> Dict:
         """
         RAGAS 5가지 메트릭 평가 (완전 구현)
         
@@ -648,17 +729,10 @@ class RAGEvaluationEngine:
             # LLM 답변 생성 (간단한 방식)
             # 검색된 문서를 기반으로 답변 요약
             if retrieved_docs:
-                # 검색된 문서에서 가장 관련있는 부분 추출
-                combined_context = " ".join(retrieved_docs[:3])  # 상위 3개 문서
-                
-                # 간단한 요약 (실제로는 LLM 사용)
-                # 여기서는 검색된 문서의 첫 부분을 답변으로 사용
-                answer = combined_context[:200] if len(combined_context) > 200 else combined_context
-                
-                # ground_truth: 첫 번째 검색 결과
+                combined_context = " ".join(retrieved_docs[:3])
                 ground_truth = retrieved_docs[0][:200]
             else:
-                answer = "관련 정보를 찾을 수 없습니다."
+                combined_context = ""
                 ground_truth = ""
             
             # RAGAS 데이터셋 구성 (모든 필드 포함)
