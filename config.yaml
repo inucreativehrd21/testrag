@@ -84,7 +84,7 @@ retrieval_configs:
       rerank_device: "cuda:1"
 
 evaluation:
-  sample_size: 10
+  sample_size: 15
   use_ragas: true
   metrics:
     - context_precision
@@ -107,5 +107,12 @@ llm:
   temperature: 0.2
   top_p: 0.9
   max_context_docs: 3
+  max_retries: 3
+  retry_delay: 2.0
+  translate_ragas_answers: true
+  ragas_translation_model: null
+
+reranker:
+  max_batch_size: 8
   translate_ragas_answers: true
   ragas_translation_model: null

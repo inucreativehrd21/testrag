@@ -13,6 +13,9 @@ RAG 평가 도구 - RAGAS 벤치마크 통합 버전
 
 import os
 import sys
+import time
+import asyncio
+import atexit
 
 os.environ["CHROMA_TELEMETRY_IMPL"] = "none"
 os.environ["CHROMA_ANONYMIZED_TELEMETRY"] = "false"
@@ -26,6 +29,7 @@ import yaml
 import logging
 import argparse
 import re
+from itertools import cycle
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Tuple
@@ -79,6 +83,25 @@ logger = logging.getLogger(__name__)
 logging.getLogger("chromadb").setLevel(logging.CRITICAL)
 logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
 logging.getLogger("httpx").setLevel(logging.CRITICAL)
+
+
+def _cleanup_async_clients():
+    """Ensure lingering async tasks finish before exit."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(asyncio.sleep(0))
+    except RuntimeError:
+        pass
+
+
+atexit.register(_cleanup_async_clients)
 # ============================================================================
 # RAG 평가 엔진 (RAGAS 통합)
 # ============================================================================
@@ -141,6 +164,7 @@ class RAGEvaluationEngine:
         self.embedding_identifier = self.embedding_config.get('model_name', 'BAAI/bge-m3')
         self.chroma_client = chromadb.Client()
         self.llm_config = self.config.get('llm', {})
+        self.reranker_config = self.config.get('reranker', {})
         self.openai_client = None
         # 크롤링 데이터 로드
         self._load_crawled_data()
@@ -301,104 +325,177 @@ class RAGEvaluationEngine:
         logger.info(f"\n{'='*70}")
         logger.info(f"2단계: 테스트 쿼리 생성")
         logger.info(f"{'='*70}")
-        
-        basic_queries = []
-        advanced_queries = []
-        
-        domain_queries = {
-            'git': [
-                "Git의 주요 명령어는 무엇인가?",
-                "Git에서 커밋이란?",
-                "브랜치 병합 방법",
-                "Git rebase 사용법"
+
+        difficulty_levels = ['easy', 'medium', 'hard']
+        questions_per_level = 5
+
+        domain_question_bank = {
+            'git': {
+                'easy': [
+                    "Git의 기본 개념은 무엇인가?",
+                    "Git에서 커밋은 어떻게 생성하나요?",
+                    "Git branch를 조회하는 명령어는?",
+                    "Git clone 사용 방법",
+                    "Git status 결과는 무엇을 의미하나요?"
+                ],
+                'medium': [
+                    "Git rebase와 merge 차이점은?",
+                    "여러 개발자가 동시에 작업할 때 충돌을 줄이는 전략은?",
+                    "Git stash를 사용하는 상황",
+                    "submodule 업데이트 절차",
+                    "hook을 활용해 품질 검사를 자동화하는 방법"
+                ],
+                'hard': [
+                    "대규모 모노레포에서 Git history를 관리하는 모범 사례는?",
+                    "Git LFS와 일반 파일 관리 전략을 어떻게 병행하나요?",
+                    "수백 개 서비스가 연동된 저장소에서 trunk 기반 개발을 안전하게 도입하는 절차",
+                    "부분 checkout이나 sparse checkout이 필요한 시나리오",
+                    "서브트리 전략을 적용할 때 주의해야 할 통합 이슈"
+                ]
+            },
+            'python': {
+                'easy': [
+                    "Python의 장점 세 가지는?",
+                    "pip로 패키지를 설치하는 명령어는?",
+                    "가상환경을 생성하는 대표적인 방법은?",
+                    "Python 인터프리터 버전 확인 방법",
+                    "list와 tuple의 차이점"
+                ],
+                'medium': [
+                    "의존성 충돌을 피하기 위한 pyproject.toml 구성 팁",
+                    "asyncio를 기반으로 IO 작업을 최적화하는 패턴",
+                    "typing 모듈을 도입했을 때의 이점",
+                    "pytest fixture를 활용한 모듈 테스트 전략",
+                    "패키지 배포 시 wheel 파일을 빌드하는 절차"
+                ],
+                'hard': [
+                    "대규모 Python 서비스에서 GIL을 우회하거나 완화하는 방법",
+                    "데이터 과학 워크플로우와 웹 백엔드를 동시에 지원하는 프로젝트 구조",
+                    "C 확장 모듈을 빌드해 성능을 높이는 과정",
+                    "분산 처리 프레임워크(Celery, Ray 등)를 Python 서비스에 통합할 때 주의점",
+                    "Python 패키지를 사내 artifact repo에서 관리하는 자동화 전략"
+                ]
+            },
+            'docker': {
+                'easy': [
+                    "Docker 이미지와 컨테이너의 차이점은?",
+                    "Dockerfile에서 FROM 지시어의 역할",
+                    "컨테이너 로그 확인 명령어",
+                    "이미지 빌드를 위한 기본 명령(docker build)",
+                    "컨테이너 종료 후 다시 실행하는 방법"
+                ],
+                'medium': [
+                    "멀티 스테이지 Dockerfile을 구성하는 이유",
+                    "Docker Compose를 사용해 복수 서비스를 연결하는 절차",
+                    "컨테이너 리소스 제한(cpu/memory) 설정 방법",
+                    "Private registry에서 이미지를 받아오는 방법",
+                    "이미지 취약점 스캔을 CI에서 자동화하는 방식"
+                ],
+                'hard': [
+                    "GPU/CPU 혼합 워크로드를 동일 클러스터에서 운영할 때 고려사항",
+                    "수백 개 서비스 이미지를 관리하는 태깅/릴리스 정책",
+                    "OCI 이미지 표준을 준수하면서 레이어 캐싱을 최적화하는 팁",
+                    "네트워크 분리(bridge/overlay)를 통해 멀티테넌시를 유지하는 전략",
+                    "대규모 이미지 빌드 파이프라인에서 병목을 줄이기 위한 캐시 서버 구성"
+                ]
+            },
+            'aws': {
+                'easy': [
+                    "AWS의 대표 서비스 세 가지는?",
+                    "EC2 인스턴스를 생성하는 기본 절차",
+                    "S3 버킷을 만드는 명령 또는 콘솔 위치",
+                    "IAM Role의 주요 목적",
+                    "RDS와 DynamoDB의 차이"
+                ],
+                'medium': [
+                    "VPC를 구성할 때 Public/Private Subnet을 나누는 이유",
+                    "CloudWatch와 CloudTrail을 활용한 모니터링 전략",
+                    "Auto Scaling Group 튜닝 포인트",
+                    "S3 비용 최적화를 위한 라이프사이클 정책",
+                    "Lambda 함수 배포 시 버전 관리 방법"
+                ],
+                'hard': [
+                    "멀티 리전 DR 아키텍처를 설계할 때의 네트워크 고려사항",
+                    "AWS Organizations로 대규모 계정을 관리하는 거버넌스 전략",
+                    "EKS/EC2 혼합 환경에서 observability를 통합하는 절차",
+                    "S3 데이터 레이크 보안 정책을 계층별로 분리하는 방법",
+                    "AWS 기반 SaaS에서 고객 데이터를 논리적/물리적으로 격리하는 기법"
+                ]
+            }
+        }
+
+        general_templates = {
+            'easy': [
+                "{domain}의 기본 개념은 무엇인가?",
+                "{domain}을 처음 사용할 때 알아야 할 명령이나 설정은?",
+                "{domain}을 설치하거나 시작하는 방법",
+                "{domain}을 통해 얻을 수 있는 이점 세 가지",
+                "{domain}에서 자주 쓰이는 실습 예제를 알려줘"
             ],
-            'python': [
-                "Python의 특징을 설명해줄래?",
-                "패키지 설치 방법",
-                "가상환경 생성 방법",
-                "Python 라이브러리"
+            'medium': [
+                "{domain}을 팀 프로젝트에 도입할 때 생길 수 있는 문제와 해결책",
+                "{domain} 관련 구성 요소나 모듈을 체계적으로 관리하는 방법",
+                "{domain} 성능을 중간 수준으로 최적화하는 전략",
+                "{domain}을 다른 시스템과 연동할 때 주의할 점",
+                "{domain}으로 자동화를 구축할 때 필요한 절차"
             ],
-            'docker': [
-                "Docker란 무엇인가?",
-                "Docker 이미지와 컨테이너",
-                "Docker 네트워크",
-                "Docker Compose 사용법"
-            ],
-            'aws': [
-                "AWS 주요 서비스",
-                "EC2 인스턴스 생성",
-                "S3 버킷",
-                "Lambda 함수"
-            ],
-            'kubernetes': [
-                "Kubernetes 기본 개념",
-                "Pod와 Deployment",
-                "Service 종류",
-                "Ingress 설정"
+            'hard': [
+                "대규모 환경에서 {domain}을 운영하며 발생하는 고급 문제와 해결책",
+                "{domain}을 고가용성/재해복구 시나리오에 맞게 설계하는 방법",
+                "{domain} 도입 후 레거시 시스템과의 통합 전략",
+                "{domain} 기반 서비스를 모니터링/보안 측면에서 강화하는 절차",
+                "{domain} 사용 시 규제 준수나 데이터 거버넌스를 고려하는 방법"
             ]
         }
-        
-        advanced_domain_queries = {
-            'git': [
-                "여러 팀이 동시에 작업하는 저장소에서 Git flow와 trunk 기반 전략을 어떻게 조합하면 충돌을 줄일 수 있을까?",
-                "서브모듈과 서브트리 전략을 비교하고, 수백 개 마이크로서비스 저장소를 통합 관리할 때 어떤 접근을 취해야 할까?"
-            ],
-            'python': [
-                "대규모 Python 서비스에서 패키지 버전 충돌과 가상환경 관리를 자동화하려면 어떤 빌드/배포 파이프라인이 필요할까?",
-                "데이터 과학 워크로드와 웹 백엔드가 공존할 때 공용 라이브러리의 호환성을 유지하는 방법은?"
-            ],
-            'docker': [
-                "GPU가 필요한 학습 파이프라인과 CPU 위주의 API 서버를 동일 클러스터에서 운영할 때 Docker 리소스 제약을 어떻게 설계해야 할까?",
-                "대규모 이미지 빌드를 최적화하고 취약점 스캔을 자동화하기 위한 CI/CD 파이프라인 구성은?"
-            ],
-            'aws': [
-                "AWS 상에서 멀티 AZ/Region 아키텍처를 구성할 때 트래픽 라우팅과 데이터 일관성을 동시에 확보하려면?",
-                "대규모 S3 데이터 레이크를 운영하며 권한분리와 비용 최적화를 달성하기 위한 구체적 전략은?"
-            ],
-            'kubernetes': [
-                "Kubernetes에서 StatefulSet과 Operator를 활용해 고가용성 DB를 구성할 때 주의할 장애 시나리오는?",
-                "수천 개의 Pod가 있는 클러스터에서 HPA와 VPA를 동시에 운용하며 메모리 스파이크를 완화하는 방법은?"
-            ]
+
+        known_domain_order = ['git', 'python', 'docker', 'aws', 'kubernetes']
+        available_domains = list(self.crawled_documents.keys())
+        domain_pool = available_domains if available_domains else []
+        for candidate in known_domain_order:
+            if candidate not in domain_pool:
+                domain_pool.append(candidate)
+        domains_for_eval = domain_pool[:4] if len(domain_pool) >= 4 else domain_pool
+        if len(domains_for_eval) < 4:
+            logger.warning("도메인이 4개 미만입니다. 기본 템플릿으로 채웁니다.")
+
+        def build_domain_level_map(domain_name: str) -> Dict[str, List[str]]:
+            domain_bank = domain_question_bank.get(domain_name.lower())
+            level_map = {}
+            for level in difficulty_levels:
+                if domain_bank and domain_bank.get(level):
+                    level_map[level] = domain_bank[level]
+                else:
+                    level_map[level] = [
+                        template.format(domain=domain_name)
+                        for template in general_templates[level]
+                    ]
+            return level_map
+
+        domain_level_map = {
+            domain: build_domain_level_map(domain)
+            for domain in domains_for_eval
         }
-        
-        general_basic = ["주요 개념", "사용 방법", "장점"]
-        general_advanced = [
-            "실제 장애 상황을 가정하고 근본 원인 분석부터 복구까지의 절차를 설명해줘.",
-            "기존 레거시 시스템과 연동하면서 발생하는 병목과 이를 완화하는 설계 패턴은 무엇일까?"
-        ]
-        
-        for domain in self.crawled_documents.keys():
-            if domain in domain_queries:
-                basic_queries.extend(domain_queries[domain])
-            else:
-                basic_queries.append(f"{domain}의 주요 개념은?")
-                basic_queries.append(f"{domain} 사용 방법")
-            
-            if domain in advanced_domain_queries:
-                advanced_queries.extend(advanced_domain_queries[domain])
-            else:
-                advanced_queries.append(f"{domain}을(를) 기존 인프라에 통합할 때 예상되는 병목과 해결 전략은?")
-                advanced_queries.append(f"{domain} 기반 서비스를 장애 허용 아키텍처로 설계하려면?")
-        
-        if not basic_queries:
-            basic_queries = general_basic.copy()
-        if not advanced_queries:
-            advanced_queries = general_advanced.copy()
-        
-        merged_queries = []
-        basic_idx = 0
-        advanced_idx = 0
-        while basic_idx < len(basic_queries) or advanced_idx < len(advanced_queries):
-            if advanced_idx < len(advanced_queries):
-                merged_queries.append(advanced_queries[advanced_idx])
-                advanced_idx += 1
-            if basic_idx < len(basic_queries):
-                merged_queries.append(basic_queries[basic_idx])
-                basic_idx += 1
-        
-        sample_size = self.config['evaluation'].get('sample_size', 5)
-        self.test_queries = merged_queries[:sample_size]
-        logger.info(f"✓ {len(self.test_queries)}개 쿼리 생성")
+
+        def collect_level_queries(level: str) -> List[str]:
+            queries = []
+            domain_iter = cycle(domains_for_eval)
+            usage_counter = {domain: 0 for domain in domains_for_eval}
+            while len(queries) < questions_per_level:
+                domain = next(domain_iter)
+                question_list = domain_level_map[domain][level]
+                idx = usage_counter[domain] % len(question_list)
+                queries.append(question_list[idx])
+                usage_counter[domain] += 1
+            return queries
+
+        final_queries = []
+        for level in difficulty_levels:
+            level_queries = collect_level_queries(level)
+            final_queries.extend(level_queries)
+            logger.info(f"  - {level} 난이도 쿼리 {len(level_queries)}개 구성")
+
+        self.test_queries = final_queries[: self.config['evaluation'].get('sample_size', 15)]
+        logger.info(f"✓ {len(self.test_queries)}개 쿼리 생성 (도메인: {', '.join(domains_for_eval[:4])})")
         for i, q in enumerate(self.test_queries, 1):
             logger.info(f"  {i}. {q}")
 
@@ -452,11 +549,22 @@ class RAGEvaluationEngine:
             logger.info(
                 f"리랭커 모델 로드 중... ({model_name}) [device={device_name}, trust_remote_code={trust_remote_code}]"
             )
-            self.reranker_models[cache_key] = CrossEncoder(
+            reranker = CrossEncoder(
                 model_name,
                 device=device_name,
                 trust_remote_code=trust_remote_code
             )
+            tokenizer = getattr(reranker, 'tokenizer', None)
+            if tokenizer is not None and tokenizer.pad_token is None:
+                if tokenizer.eos_token is not None:
+                    tokenizer.pad_token = tokenizer.eos_token
+                else:
+                    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                    if hasattr(reranker.model, 'resize_token_embeddings'):
+                        reranker.model.resize_token_embeddings(len(tokenizer))
+                tokenizer.pad_token_id = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+                tokenizer.padding_side = 'right'
+            self.reranker_models[cache_key] = reranker
             logger.info("✓ 리랭커 로드 완료")
         return self.reranker_models[cache_key]
 
@@ -469,10 +577,7 @@ class RAGEvaluationEngine:
             return documents
         pairs = [[query, doc] for doc in documents]
         try:
-            scores = reranker.predict(pairs)
-            if torch.is_tensor(scores):
-                scores = scores.detach().cpu().to(torch.float32).numpy()
-            scores = np.asarray(scores, dtype=np.float32).tolist()
+            scores = self._batched_reranker_predict(reranker, pairs)
             ranked = [doc for _, doc in sorted(zip(scores, documents), reverse=True)]
             return ranked[:top_k]
         except Exception as e:
@@ -496,9 +601,7 @@ class RAGEvaluationEngine:
             if reranker is None:
                 continue
             try:
-                scores = reranker.predict(pairs)
-                if torch.is_tensor(scores):
-                    scores = scores.detach().cpu().to(torch.float32).numpy()
+                scores = self._batched_reranker_predict(reranker, pairs)
                 scores = np.asarray(scores, dtype=np.float32)
                 scores_total += weight * scores
                 valid_models += 1
@@ -542,6 +645,23 @@ class RAGEvaluationEngine:
             )
         return stage1_docs[:final_k]
 
+    def _format_reranker_scores(self, raw_scores) -> np.ndarray:
+        if torch.is_tensor(raw_scores):
+            raw_scores = raw_scores.detach().cpu()
+        return np.asarray(raw_scores, dtype=np.float32)
+
+    def _batched_reranker_predict(self, reranker, pairs: List[List[str]]) -> List[float]:
+        if not pairs:
+            return []
+        batch_size = max(1, self.reranker_config.get('max_batch_size', 16))
+        scores: List[float] = []
+        for start in range(0, len(pairs), batch_size):
+            batch_pairs = pairs[start:start + batch_size]
+            raw = reranker.predict(batch_pairs)
+            formatted = self._format_reranker_scores(raw)
+            scores.extend(formatted.tolist())
+        return scores
+
     def _get_llm_client(self) -> OpenAI:
         """OpenAI LLM 클라이언트 로드"""
         if self.openai_client is not None:
@@ -583,43 +703,48 @@ class RAGEvaluationEngine:
         )
         return system_prompt, user_prompt
 
-    def _generate_answer(self, query: str, retrieved_docs: List[str]) -> Tuple[str, str]:
-        """LLM을 활용한 최종 답변 생성"""
+    def _generate_answer(self, query: str, retrieved_docs: List[str]) -> Tuple[str, str, bool, str]:
+        """LLM을 활용한 최종 답변 생성 (재시도 + 상태 반환)"""
         if not retrieved_docs:
-            return "관련 정보를 찾을 수 없습니다.", ""
+            return "", "", False, "no_context"
         max_docs = self.llm_config.get('max_context_docs', 3)
         context_subset = retrieved_docs[:max_docs]
         system_prompt, user_prompt = self._build_llm_prompt(query, context_subset)
         combined_prompt = f"System:\n{system_prompt}\n\nUser:\n{user_prompt}"
-        fallback_answer = context_subset[0][:200]
-        try:
-            client = self._get_llm_client()
-            response = client.chat.completions.create(
-                model=self.llm_config.get('model_name', 'gpt-4o-mini'),
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.llm_config.get('temperature', 0.2),
-                top_p=self.llm_config.get('top_p', 0.9),
-                max_tokens=self.llm_config.get('max_new_tokens', 256)
-            )
-            choice = response.choices[0]
-            message_content = choice.message.content
-            if isinstance(message_content, list):
-                # OpenAI 응답이 조각 리스트인 경우 문자열로 병합
-                message_content = "\n".join(
-                    segment.get('text', '') if isinstance(segment, dict) else str(segment)
-                    for segment in message_content
+        max_retries = self.llm_config.get('max_retries', 2)
+        retry_delay = self.llm_config.get('retry_delay', 2.0)
+        last_error = ""
+        for attempt in range(1, max_retries + 1):
+            try:
+                client = self._get_llm_client()
+                response = client.chat.completions.create(
+                    model=self.llm_config.get('model_name', 'gpt-4o-mini'),
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    temperature=self.llm_config.get('temperature', 0.2),
+                    top_p=self.llm_config.get('top_p', 0.9),
+                    max_tokens=self.llm_config.get('max_new_tokens', 256)
                 )
-            answer = (message_content or "").strip()
-            if not answer:
-                logger.warning("LLM 응답이 비어 있어 기본 컨텍스트로 대체합니다.")
-                answer = fallback_answer
-        except Exception as e:
-            logger.warning(f"LLM 답변 생성 실패: {e}")
-            answer = fallback_answer
-        return answer, combined_prompt
+                choice = response.choices[0]
+                message_content = choice.message.content
+                if isinstance(message_content, list):
+                    message_content = "\n".join(
+                        segment.get('text', '') if isinstance(segment, dict) else str(segment)
+                        for segment in message_content
+                    )
+                answer = (message_content or "").strip()
+                if answer:
+                    return answer, combined_prompt, True, ""
+                last_error = "empty_response"
+                logger.warning("LLM 응답이 비어 있습니다. 재시도합니다.")
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"LLM 호출 실패 (시도 {attempt}/{max_retries}): {e}")
+                time.sleep(retry_delay)
+        logger.warning(f"LLM 반복 실패로 조합을 스킵합니다: {last_error}")
+        return "", combined_prompt, False, last_error
 
     def _prepare_answer_for_ragas(self, answer: str, retrieved_docs: List[str]) -> str:
         """RAGAS용 영어 답변 생성 (필요시 번역)"""
@@ -739,10 +864,11 @@ class RAGEvaluationEngine:
             retrieved_docs = self._retrieve(query, collection, retrieval_config)
             
             # LLM 답변 생성
-            llm_answer, llm_prompt = self._generate_answer(query, retrieved_docs)
+            llm_answer, llm_prompt, llm_success, llm_error = self._generate_answer(query, retrieved_docs)
+            if not llm_success:
+                logger.warning(f"LLM 실패로 조합 스킵: {llm_error}")
+                return None
             llm_answer = (llm_answer or "").strip()
-            if not llm_answer:
-                llm_answer = "관련 정보를 찾을 수 없습니다."
             ragas_answer = self._prepare_answer_for_ragas(llm_answer, retrieved_docs)
             
             # 기본 메트릭
