@@ -102,3 +102,5 @@ llm:
   temperature: 0.2
   top_p: 0.9
   max_context_docs: 3
+  translate_ragas_answers: true
+  ragas_translation_model: null

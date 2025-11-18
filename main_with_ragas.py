@@ -601,7 +601,43 @@ class RAGEvaluationEngine:
             logger.warning(f"LLM 답변 생성 실패: {e}")
             answer = fallback_answer
         return answer, combined_prompt
-    
+
+    def _prepare_answer_for_ragas(self, answer: str, retrieved_docs: List[str]) -> str:
+        """RAGAS용 영어 답변 생성 (필요시 번역)"""
+        answer = (answer or "").strip()
+        if not answer:
+            return ""
+        if not self.llm_config.get('translate_ragas_answers', False):
+            return answer
+        translation_model = (
+            self.llm_config.get('ragas_translation_model')
+            or self.llm_config.get('model_name', 'gpt-4o-mini')
+        )
+        translation_prompt = (
+            "Translate the following assistant answer into English while preserving all factual statements. "
+            "Return concise bullet sentences that can be evaluated for factual consistency. "
+            "Do not add new information."
+        )
+        try:
+            client = self._get_llm_client()
+            response = client.chat.completions.create(
+                model=translation_model,
+                messages=[
+                    {"role": "system", "content": translation_prompt},
+                    {"role": "user", "content": answer}
+                ],
+                temperature=0.0,
+                max_tokens=self.llm_config.get('max_new_tokens', 256)
+            )
+            translated = response.choices[0].message.content.strip()
+            if translated:
+                return translated
+        except Exception as e:
+            logger.warning(f"RAGAS 번역 실패: {e}")
+        # 번역 실패 시 첫 번째 검색 결과 요약으로 대체
+        fallback = retrieved_docs[0][:400] if retrieved_docs else answer
+        return fallback
+
     # ========================================================================
     # 3단계: 평가 실행
     # ========================================================================
@@ -688,6 +724,7 @@ class RAGEvaluationEngine:
             llm_answer = (llm_answer or "").strip()
             if not llm_answer:
                 llm_answer = "관련 정보를 찾을 수 없습니다."
+            ragas_answer = self._prepare_answer_for_ragas(llm_answer, retrieved_docs)
             
             # 기본 메트릭
             result = {
@@ -708,8 +745,8 @@ class RAGEvaluationEngine:
             }
             
             # 6. RAGAS 평가 (선택사항)
-            if self.use_ragas and retrieved_docs and llm_answer.strip():
-                ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, llm_answer)
+            if self.use_ragas and retrieved_docs and ragas_answer.strip():
+                ragas_metrics = self._evaluate_with_ragas(query, retrieved_docs, ragas_answer)
                 result.update(ragas_metrics)
             
             return result
