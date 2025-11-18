@@ -470,6 +470,8 @@ class RAGEvaluationEngine:
         pairs = [[query, doc] for doc in documents]
         try:
             scores = reranker.predict(pairs)
+            if torch.is_tensor(scores):
+                scores = scores.detach().cpu().to(torch.float32).numpy()
             scores = np.asarray(scores, dtype=np.float32).tolist()
             ranked = [doc for _, doc in sorted(zip(scores, documents), reverse=True)]
             return ranked[:top_k]
@@ -494,7 +496,10 @@ class RAGEvaluationEngine:
             if reranker is None:
                 continue
             try:
-                scores = np.asarray(reranker.predict(pairs), dtype=np.float32)
+                scores = reranker.predict(pairs)
+                if torch.is_tensor(scores):
+                    scores = scores.detach().cpu().to(torch.float32).numpy()
+                scores = np.asarray(scores, dtype=np.float32)
                 scores_total += weight * scores
                 valid_models += 1
             except Exception as e:
