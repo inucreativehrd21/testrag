@@ -1,0 +1,280 @@
+# Runpod Setup Guide for RAG Pipeline
+
+This guide helps you set up the RAG pipeline on Runpod with RTX 5090 or other high-end GPUs.
+
+## Prerequisites
+
+- Runpod pod with RTX 5090 or similar GPU (CUDA 12.0+)
+- Python 3.11 or 3.12
+- Git installed
+
+## Quick Setup
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/inucreativehrd21/testrag.git
+cd testrag/experiments/rag_pipeline
+```
+
+### 2. **CRITICAL**: Remove Old PyTorch & Install 2.8.0+
+
+**⚠️ RTX 5090 requires PyTorch 2.8.0+ for CUDA capability sm_120 support**
+
+```bash
+# Step 1: Completely remove old PyTorch
+pip uninstall torch torchvision torchaudio -y
+pip cache purge
+
+# Step 2: Install PyTorch 2.8.0+ with CUDA 12.4
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Step 3: Verify installation
+python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
+```
+
+**Expected output:**
+```
+PyTorch: 2.8.0+cu124
+CUDA: True
+GPU: NVIDIA GeForce RTX 5090
+```
+
+**Why?** RTX 5090 has CUDA compute capability 12.0 (sm_120), which requires PyTorch 2.8.0 or later.
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements_runpod.txt
+```
+
+### 4. Configure for GPU
+
+Edit `config/base.yaml`:
+
+```yaml
+embedding:
+  device: cuda  # Use GPU
+
+retrieval:
+  rerankers:
+    stage1:
+      device: cuda  # Single GPU
+    stage2:
+      device: cuda  # Can use same GPU or cuda:1 if available
+```
+
+### 5. Set Environment Variables
+
+```bash
+# Create .env file
+echo "OPENAI_API_KEY=your-key-here" > .env
+```
+
+### 6. Run Smoke Test
+
+```bash
+# Full test (will create chunks and index)
+python smoke_test.py
+
+# Or skip data prep if chunks already exist
+python smoke_test.py --skip-prep
+```
+
+---
+
+## Expected Performance
+
+With RTX 5090:
+- **Data Preparation**: ~30 seconds (15,461 chunks)
+- **Index Building**: ~2-5 minutes (BAAI/bge-m3)
+- **Query Inference**: ~1-2 seconds per question
+
+---
+
+## Troubleshooting
+
+### Error: "no kernel image is available for execution"
+
+**Cause**: PyTorch version doesn't support your GPU's CUDA capability.
+
+**Solution**:
+```bash
+# Check PyTorch version
+python -c "import torch; print(torch.__version__)"
+
+# If version < 2.8.0, reinstall:
+pip uninstall torch torchvision torchaudio -y
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+```
+
+### Error: "CUDA out of memory"
+
+**Solution 1**: Reduce batch size in `config/base.yaml`:
+```yaml
+embedding:
+  batch_size: 16  # Reduce from 32
+```
+
+**Solution 2**: Use single reranker:
+```yaml
+retrieval:
+  rerankers:
+    stage1:
+      device: cuda
+    stage2:
+      device: cpu  # Move to CPU
+```
+
+### Error: "No module named 'peft'"
+
+**Solution**:
+```bash
+pip install peft==0.10.0
+```
+
+---
+
+## Verification
+
+### Check CUDA Availability
+
+```python
+import torch
+print(f"PyTorch version: {torch.__version__}")
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"CUDA version: {torch.version.cuda}")
+print(f"GPU: {torch.cuda.get_device_name(0)}")
+```
+
+Expected output:
+```
+PyTorch version: 2.8.0+cu124
+CUDA available: True
+CUDA version: 12.4
+GPU: NVIDIA GeForce RTX 5090
+```
+
+### Verify Embeddings Work
+
+```python
+from FlagEmbedding import BGEM3FlagModel
+
+model = BGEM3FlagModel('BAAI/bge-m3', use_fp16=True, device='cuda')
+embeddings = model.encode(["Test sentence"], return_dense=True)
+print(f"Embedding shape: {embeddings['dense_vecs'].shape}")
+```
+
+---
+
+## Running the Pipeline
+
+### 1. Data Preparation (if needed)
+
+```bash
+python data_prep.py
+```
+
+### 2. Build Index
+
+```bash
+python index_builder.py
+```
+
+### 3. Ask Questions
+
+```bash
+python answerer.py "Git의 브랜치란 무엇인가요?"
+```
+
+### 4. Start API Server
+
+```bash
+python serve.py --host 0.0.0.0 --port 8000
+```
+
+Test with curl:
+```bash
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Docker 컨테이너란?", "return_metadata": true}'
+```
+
+### 5. Run Batch Evaluation
+
+```bash
+python evaluate.py --questions sample_questions.txt
+```
+
+---
+
+## Performance Tips
+
+### 1. Use FP16 (Already Enabled)
+
+Models automatically use FP16 for faster inference:
+```python
+BGEM3FlagModel(..., use_fp16=True)
+```
+
+### 2. Increase Batch Size (if GPU memory allows)
+
+```yaml
+embedding:
+  batch_size: 64  # Increase from 32
+```
+
+### 3. Pin Models to Specific GPUs
+
+If you have multiple GPUs:
+```yaml
+retrieval:
+  rerankers:
+    stage1:
+      device: cuda:0
+    stage2:
+      device: cuda:1
+```
+
+---
+
+## Common Commands
+
+```bash
+# Full pipeline test
+python smoke_test.py
+
+# Skip prep (if data already exists)
+python smoke_test.py --skip-prep
+
+# Skip both prep and indexing
+python smoke_test.py --skip-prep --skip-index
+
+# Run with debug logging
+python answerer.py "Question" --log-level DEBUG
+
+# Start server with auto-reload
+python serve.py --reload
+```
+
+---
+
+## File Locations
+
+- **Config**: `config/base.yaml`
+- **Chunks**: `artifacts/chunks.parquet`
+- **Vector Index**: `artifacts/chroma_db/`
+- **Eval Results**: `artifacts/evals/`
+- **Logs**: Console output (or configure file logging)
+
+---
+
+## Next Steps
+
+1. ✅ Verify GPU setup works
+2. ✅ Run smoke test
+3. ✅ Start API server
+4. 📊 Run evaluations with your own questions
+5. 🚀 Deploy to production
+
+For more details, see [README.md](README.md).
