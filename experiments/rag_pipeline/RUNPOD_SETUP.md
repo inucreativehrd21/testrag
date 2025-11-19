@@ -10,24 +10,52 @@ This guide helps you set up the RAG pipeline on Runpod with RTX 5090 or other hi
 
 ## Quick Setup
 
-### 1. Clone Repository
+### Option A: Automated Setup (Recommended)
+
+**Use the automated setup script for complete installation:**
+
+```bash
+git clone https://github.com/inucreativehrd21/testrag.git
+cd testrag/experiments/rag_pipeline
+
+# Run automated setup script
+bash install_runpod.sh
+```
+
+The script will:
+1. ✅ Check Python version and virtual environment
+2. ✅ **AGGRESSIVELY remove all old PyTorch** installations
+3. ✅ Verify PyTorch is completely removed
+4. ✅ Install PyTorch 2.8.0+ with CUDA 12.4
+5. ✅ Test RTX 5090 sm_120 kernel support
+6. ✅ Install all dependencies
+7. ✅ Verify FlagEmbedding works on GPU
+
+---
+
+### Option B: Manual Setup
+
+If you prefer manual installation or the script fails:
+
+#### 1. Clone Repository
 
 ```bash
 git clone https://github.com/inucreativehrd21/testrag.git
 cd testrag/experiments/rag_pipeline
 ```
 
-### 2. **CRITICAL**: Remove Old PyTorch & Install 2.8.0+
+#### 2. **CRITICAL**: Remove Old PyTorch & Install 2.8.0+
 
 **⚠️ RTX 5090 requires PyTorch 2.8.0+ for CUDA capability sm_120 support**
 
 ```bash
-# Step 1: Completely remove old PyTorch
+# Step 1: AGGRESSIVELY remove old PyTorch
+pip list | grep torch | awk '{print $1}' | xargs pip uninstall -y
 pip uninstall torch torchvision torchaudio -y
 pip cache purge
 
 # Step 2: Install PyTorch 2.8.0+ with CUDA 12.4
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # Step 3: Verify installation
 python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
@@ -42,15 +70,37 @@ GPU: NVIDIA GeForce RTX 5090
 
 **Why?** RTX 5090 has CUDA compute capability 12.0 (sm_120), which requires PyTorch 2.8.0 or later.
 
-### 3. Install Dependencies
+#### 3. Install Dependencies
 
 ```bash
-pip install -r requirements_runpod.txt
+pip install --no-cache-dir -r requirements_runpod.txt
 ```
 
-### 4. Configure for GPU
+---
 
-Edit `config/base.yaml`:
+### Verify Installation
+
+After installation (automated or manual), run the diagnostic tool:
+
+```bash
+python diagnose_gpu.py
+```
+
+This will check:
+- ✅ PyTorch version (must be 2.8.0+)
+- ✅ CUDA availability
+- ✅ GPU detection and compute capability
+- ✅ sm_120 kernel support
+- ✅ FlagEmbedding GPU compatibility
+- ✅ All dependencies
+
+If all checks pass, you're ready to run the pipeline!
+
+---
+
+### Configure for GPU
+
+Edit [config/base.yaml](config/base.yaml):
 
 ```yaml
 embedding:
@@ -96,16 +146,43 @@ With RTX 5090:
 
 ### Error: "no kernel image is available for execution"
 
-**Cause**: PyTorch version doesn't support your GPU's CUDA capability.
+**Cause**: PyTorch version doesn't support your GPU's CUDA capability (sm_120 for RTX 5090).
 
 **Solution**:
-```bash
-# Check PyTorch version
-python -c "import torch; print(torch.__version__)"
 
-# If version < 2.8.0, reinstall:
-pip uninstall torch torchvision torchaudio -y
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+**Step 1**: Run diagnostics to confirm the issue:
+```bash
+python diagnose_gpu.py
+```
+
+**Step 2**: If PyTorch version < 2.8.0, completely remove and reinstall:
+```bash
+# AGGRESSIVE removal
+pip list | grep torch | awk '{print $1}' | xargs pip uninstall -y
+pip cache purge
+
+# Verify removal (should fail with ImportError)
+python -c "import torch"
+
+# Reinstall PyTorch 2.8.0+
+pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# Test sm_120 support
+python -c "import torch; t = torch.randn(10,10,device='cuda'); print('✓ sm_120 works!')"
+```
+
+**Step 3**: If still failing, consider recreating your virtual environment:
+```bash
+# Exit current environment
+deactivate
+
+# Create fresh environment
+python -m venv venv_rtx5090
+source venv_rtx5090/bin/activate  # On Linux/Mac
+# or: venv_rtx5090\Scripts\activate  # On Windows
+
+# Run automated setup
+bash install_runpod.sh
 ```
 
 ### Error: "CUDA out of memory"
@@ -137,7 +214,21 @@ pip install peft==0.10.0
 
 ## Verification
 
-### Check CUDA Availability
+### Quick Check
+
+Run the comprehensive diagnostic tool:
+
+```bash
+python diagnose_gpu.py
+```
+
+This checks everything in one command and provides detailed troubleshooting if anything fails.
+
+### Manual Verification
+
+If you prefer to check manually:
+
+#### Check CUDA Availability
 
 ```python
 import torch
@@ -145,6 +236,15 @@ print(f"PyTorch version: {torch.__version__}")
 print(f"CUDA available: {torch.cuda.is_available()}")
 print(f"CUDA version: {torch.version.cuda}")
 print(f"GPU: {torch.cuda.get_device_name(0)}")
+
+# Check compute capability
+capability = torch.cuda.get_device_capability(0)
+print(f"Compute capability: sm_{capability[0]}{capability[1]}")
+
+# Test kernel execution
+test_tensor = torch.randn(10, 10, device='cuda')
+result = test_tensor @ test_tensor.T
+print("✓ CUDA kernels working!")
 ```
 
 Expected output:
@@ -153,9 +253,11 @@ PyTorch version: 2.8.0+cu124
 CUDA available: True
 CUDA version: 12.4
 GPU: NVIDIA GeForce RTX 5090
+Compute capability: sm_120
+✓ CUDA kernels working!
 ```
 
-### Verify Embeddings Work
+#### Verify Embeddings Work
 
 ```python
 from FlagEmbedding import BGEM3FlagModel
