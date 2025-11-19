@@ -1,0 +1,84 @@
+# Logging configuration for RAG pipeline
+#
+# Usage:
+#   import logging.config
+#   import yaml
+#
+#   with open('logging_config.yaml') as f:
+#       config = yaml.safe_load(f)
+#   logging.config.dictConfig(config)
+
+version: 1
+disable_existing_loggers: False
+
+formatters:
+  simple:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+
+  detailed:
+    format: '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+    datefmt: '%Y-%m-%d %H:%M:%S'
+
+  json:
+    # For structured logging to files or monitoring systems
+    format: '{"timestamp": "%(asctime)s", "name": "%(name)s", "level": "%(levelname)s", "message": "%(message)s", "file": "%(filename)s", "line": %(lineno)d}'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+    stream: ext://sys.stdout
+
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: DEBUG
+    formatter: detailed
+    filename: logs/rag_pipeline.log
+    maxBytes: 10485760  # 10MB
+    backupCount: 5
+
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    level: ERROR
+    formatter: detailed
+    filename: logs/errors.log
+    maxBytes: 10485760
+    backupCount: 5
+
+loggers:
+  __main__:
+    level: INFO
+    handlers: [console, file]
+    propagate: False
+
+  data_prep:
+    level: INFO
+    handlers: [console, file]
+    propagate: False
+
+  index_builder:
+    level: INFO
+    handlers: [console, file]
+    propagate: False
+
+  answerer:
+    level: INFO
+    handlers: [console, file]
+    propagate: False
+
+  evaluate:
+    level: INFO
+    handlers: [console, file]
+    propagate: False
+
+  serve:
+    level: INFO
+    handlers: [console, file]
+    propagate: False
+
+root:
+  level: INFO
+  handlers: [console, file, error_file]

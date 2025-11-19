@@ -1,0 +1,44 @@
+project:
+  name: dev-helper-rag
+  artifacts_dir: artifacts
+
+data:
+  raw_dir: ../../data/raw
+  domains: [git, python, docker, aws]
+
+chunking:
+  primary:
+    chunk_size: 1024
+    chunk_overlap: 150
+  fallback:
+    chunk_size: 256
+    chunk_overlap: 50
+
+embedding:
+  model_name: BAAI/bge-m3
+  device: cpu  # Changed from auto to cpu for Windows compatibility
+  batch_size: 32
+  max_length: 1024
+
+retrieval:
+  dense_top_k: 25
+  rerank_top_k: 5
+  rerankers:
+    stage1:
+      model_name: BAAI/bge-reranker-v2-m3
+      device: cpu  # Changed from cuda:0 to cpu
+    stage2:
+      model_name: BAAI/bge-reranker-large
+      device: cpu  # Changed from cuda:1 to cpu
+
+llm:
+  provider: openai
+  model_name: gpt-4.1
+  max_new_tokens: 300
+  temperature: 0.2
+  top_p: 0.9
+  system_prompt_path: prompts/system.txt
+
+
+
+
