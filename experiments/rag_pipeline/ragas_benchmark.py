@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any
@@ -119,11 +120,12 @@ class RagasBenchmark:
 
         # Generate answer using the retrieved contexts
         answer = self._generate_answer(question, contexts, decision)
+        decision_data = asdict(decision)
 
         return {
             'answer': answer,
             'contexts': contexts,
-            'decision': decision,
+            'decision': decision_data,
             'num_contexts': len(contexts)
         }
 
@@ -202,7 +204,9 @@ class RagasBenchmark:
                 'id': q_data['id'],
                 'difficulty': difficulty,
                 'domain': domain,
-                'decision': response['decision'],
+                'decision_difficulty': response['decision'].get('difficulty'),
+                'decision_strategy': response['decision'].get('strategy'),
+                'decision_reason': response['decision'].get('reason'),
                 'num_contexts': response['num_contexts']
             })
 
