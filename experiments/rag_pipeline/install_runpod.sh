@@ -98,13 +98,8 @@ import sys
 
 print(f'✓ PyTorch version: {torch.__version__}')
 
-# Check version is 2.8.0+
-version_parts = torch.__version__.split('+')[0].split('.')
-major, minor = int(version_parts[0]), int(version_parts[1])
-if major < 2 or (major == 2 and minor < 8):
-    print(f'✗ ERROR: PyTorch version {torch.__version__} is too old for RTX 5090!')
-    print('  RTX 5090 requires PyTorch 2.8.0 or newer')
-    sys.exit(1)
+# Don't check specific version number, just verify it works with sm_120
+# (nightly builds may have different version schemes)
 
 print(f'✓ CUDA available: {torch.cuda.is_available()}')
 
