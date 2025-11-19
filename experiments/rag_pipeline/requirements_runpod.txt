@@ -1,0 +1,30 @@
+# RunPod (Python 3.11 + CUDA) dependency set
+# Mirrors requirements.txt but upgrades packages that dropped 3.11 wheels.
+
+# Core runtime
+pandas==2.2.2
+pyarrow==16.1.0
+numpy==1.26.4
+pyyaml==6.0.1
+python-dotenv==1.0.0
+
+# Chunking / text processing
+langchain-text-splitters==0.0.1
+
+# Embedding / retrieval
+FlagEmbedding==1.2.11
+chromadb==0.4.24
+sentence-transformers==2.7.0
+onnxruntime==1.18.1
+
+# LLM / API client
+openai==1.40.0
+
+# API serving
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+
+# Supporting libraries
+huggingface-hub==0.22.2
+requests==2.31.0
