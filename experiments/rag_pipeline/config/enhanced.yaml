@@ -1,0 +1,53 @@
+project:
+  name: dev-helper-rag-enhanced
+  artifacts_dir: artifacts
+
+data:
+  raw_dir: ../../data/raw
+  domains: [git, python]  # Focused on Git and Python only
+
+chunking:
+  primary:
+    chunk_size: 1024
+    chunk_overlap: 150
+  fallback:
+    chunk_size: 256
+    chunk_overlap: 50
+
+embedding:
+  model_name: BAAI/bge-m3
+  device: cpu  # Changed from auto to cpu for Windows compatibility
+  batch_size: 32
+  max_length: 1024
+
+retrieval:
+  # Hybrid Search Configuration
+  hybrid_dense_top_k: 50   # Retrieve more candidates for sparse re-scoring
+  hybrid_sparse_top_k: 50  # Sparse search on dense candidates
+  rrf_k: 60                # Reciprocal Rank Fusion constant
+
+  # Reranking Configuration
+  dense_top_k: 25          # Legacy parameter (not used in hybrid mode)
+  rerank_top_k: 5          # Final number of contexts after reranking
+
+  rerankers:
+    stage1:
+      model_name: BAAI/bge-reranker-v2-m3
+      device: cuda:0  # Changed from cuda:0 to cpu
+    stage2:
+      model_name: BAAI/bge-reranker-large
+      device: cuda:1  # Changed from cuda:1 to cpu
+
+# Context Quality Filter (Self-RAG style)
+context_quality:
+  enabled: true            # Enable/disable quality filtering
+  threshold: 0.6           # Relevance threshold (not currently used, but for future)
+  evaluator_model: gpt-4o-mini  # Cheap model for context evaluation
+
+llm:
+  provider: openai
+  model_name: gpt-4.1      # Updated to latest model
+  max_new_tokens: 300
+  temperature: 0.2
+  top_p: 0.9
+  system_prompt_path: prompts/system.txt
