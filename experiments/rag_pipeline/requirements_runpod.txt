@@ -1,5 +1,6 @@
-# RunPod (Python 3.11 + CUDA) dependency set
-# Mirrors requirements.txt but upgrades packages that dropped 3.11 wheels.
+# RunPod (Python 3.11-3.12 + CUDA 12.4) dependency set
+# For RTX 5090 and other sm_120 GPUs - requires PyTorch 2.8.0+
+# Install PyTorch first: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # Core runtime
 pandas==2.2.2
@@ -15,7 +16,8 @@ langchain-text-splitters==0.0.1
 FlagEmbedding==1.2.11
 chromadb==0.4.24
 sentence-transformers==2.7.0
-onnxruntime==1.18.1
+onnxruntime-gpu==1.18.1  # GPU version for CUDA
+peft==0.10.0  # Required by FlagEmbedding for rerankers
 
 # LLM / API client
 openai==1.40.0
