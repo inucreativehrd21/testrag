@@ -3,27 +3,16 @@
     {
       "id": 1,
       "domain": "git",
-      "difficulty": "irrelevant",
-      "question": "쿠버네티스에서 Pod 재시작을 강제로 트리거하려면 어떤 kubectl 명령을 쓰나요?",
-      "ground_truth": "이 질문은 Git 문서 범위 밖의 쿠버네티스 내용입니다. git 저장소나 브랜치와 연관된 설명을 제공할 수 없습니다.",
-      "reference_context": [
-        "Git 지식 베이스는 소스 코드 버전 관리에 초점을 둡니다.",
-        "쿠버네티스 Pod 재시작은 kubectl rollout restart 같은 명령으로 처리하지만 이는 Git 아티클과 관련이 없습니다."
-      ]
-    },
-    {
-      "id": 2,
-      "domain": "git",
       "difficulty": "easy",
       "question": "Git에서 마지막 커밋 메시지를 수정하고 싶을 때 사용하는 명령은 무엇인가요?",
-      "ground_truth": "git commit --amend 명령을 사용하면 직전 커밋 메시지를 수정하거나 스테이징된 변경을 같은 커밋으로 묶을 수 있습니다.",
+      "ground_truth": "git commit --amend를 사용하면 직전 커밋 메시지를 수정하거나 스테이징된 변경을 같은 커밋으로 묶을 수 있습니다. 공개 저장소에 push하기 전에만 사용하는 것이 안전합니다.",
       "reference_context": [
         "git commit --amend는 HEAD 커밋을 다시 작성합니다.",
         "push 전에만 사용하는 것이 안전합니다."
       ]
     },
     {
-      "id": 3,
+      "id": 2,
       "domain": "git",
       "difficulty": "medium",
       "question": "여러 사람이 사용하는 릴리스 브랜치에서 충돌 없이 긴급 패치를 주입하려면 어떤 Git 전략을 권장하나요?",
@@ -34,29 +23,29 @@
       ]
     },
     {
-      "id": 4,
+      "id": 3,
       "domain": "git",
       "difficulty": "hard",
       "question": "Git 서브모듈을 사용하는 모노레포에서 특정 커밋 시점으로 전체 종속성을 동기화하려면 어떤 단계가 필요합니까?",
-      "ground_truth": "루트 리포지터리에서 git submodule sync && git submodule update --init --recursive 명령으로 서브모듈 URL과 커밋을 동기화합니다. 특정 커밋 해시로 체크아웃한 뒤에는 각 서브모듈에서도 동일한 커밋을 checkout해야 하며, CI에서는 --jobs 옵션으로 병렬 업데이트를 수행하여 정확한 버전을 고정합니다.",
+      "ground_truth": "루트 리포지터리에서 git submodule sync && git submodule update --init --recursive 명령으로 서브모듈 URL과 커밋을 동기화합니다. 특정 커밋 해시로 체크아웃한 뒤에는 각 서브모듈에서도 동일한 커밋을 checkout하고, CI에서는 --jobs 옵션으로 병렬 업데이트를 수행합니다.",
       "reference_context": [
         "git submodule sync는 .gitmodules와 .git/config를 일치시킵니다.",
         "git submodule update --init --recursive --jobs N으로 깊은 종속성까지 맞출 수 있습니다."
       ]
     },
     {
-      "id": 5,
-      "domain": "python",
-      "difficulty": "irrelevant",
-      "question": "Docker에서 multi-stage 빌드를 사용할 때 이미지 크기를 줄이는 방법은 무엇인가요?",
-      "ground_truth": "이 질문은 Python 언어 주제와 무관합니다. Python 자료에서는 Docker 빌드 최적화 전략을 다루지 않습니다.",
+      "id": 4,
+      "domain": "git",
+      "difficulty": "advanced",
+      "question": "대규모 리포지터리에서 과거 커밋에 포함된 비밀 키를 안전하게 삭제하고 히스토리를 재작성하려면 어떤 Git 도구와 절차를 사용해야 하나요?",
+      "ground_truth": "git filter-repo 또는 BFG Repo-Cleaner로 민감 데이터를 제거하고, --force push 후 모든 협업자에게 재클론 또는 fetch 후 reset을 안내합니다. 서브모듈과 태그도 동일하게 정리해야 안전합니다.",
       "reference_context": [
-        "Python 문서는 언어 기능과 표준 라이브러리에 집중합니다.",
-        "multi-stage Docker 빌드는 컨테이너 문서에서 확인해야 합니다."
+        "git filter-repo는 filter-branch보다 빠르고 안전하게 히스토리를 재작성합니다.",
+        "히스토리를 재작성한 뒤에는 강제 push와 전체 재클론 지침이 필요합니다."
       ]
     },
     {
-      "id": 6,
+      "id": 5,
       "domain": "python",
       "difficulty": "easy",
       "question": "Python에서 리스트 컴프리헨션을 사용해 1부터 5까지 제곱 값을 만드는 코드 예시는 무엇인가요?",
@@ -67,7 +56,7 @@
       ]
     },
     {
-      "id": 7,
+      "id": 6,
       "domain": "python",
       "difficulty": "medium",
       "question": "asyncio에서 동시에 여러 HTTP 요청을 처리하려면 어떤 패턴을 사용하나요?",
@@ -78,29 +67,29 @@
       ]
     },
     {
-      "id": 8,
+      "id": 7,
       "domain": "python",
       "difficulty": "hard",
       "question": "대규모 데이터 처리를 위해 Python에서 multiprocessing과 shared memory를 함께 사용할 때 고려해야 할 점은 무엇인가요?",
-      "ground_truth": "multiprocessing의 shared_memory.ShareableList나 Array를 사용하면 프로세스 간 데이터를 복사 없이 공유할 수 있지만, 동기화를 위해 Lock 또는 Manager를 함께 사용해야 합니다. 또한 공유 객체는 picklable 해야 하며, Windows에서는 if __name__ == '__main__' 가드 내에서 프로세스를 생성해야 합니다.",
+      "ground_truth": "multiprocessing.shared_memory.ShareableList나 Array로 데이터를 공유할 수 있지만, Lock 또는 Manager로 동기화해야 하며, Windows에서는 if __name__ == '__main__' 가드 내에서 프로세스를 생성해야 합니다.",
       "reference_context": [
         "shared_memory 모듈은 Python 3.8+에서 제공됩니다.",
         "동기화 primitives를 사용해 데이터 경합을 방지해야 합니다."
       ]
     },
     {
-      "id": 9,
-      "domain": "docker",
-      "difficulty": "irrelevant",
-      "question": "AWS IAM에서 MFA를 강제하려면 어떤 정책을 사용하나요?",
-      "ground_truth": "이 질문은 Docker 컨테이너와 관련이 없습니다. Docker 문서는 IAM 정책 구성을 다루지 않습니다.",
+      "id": 8,
+      "domain": "python",
+      "difficulty": "advanced",
+      "question": "typing.Protocol을 활용해 구조적 서브타이핑을 적용하면서 mypy 검증을 안정적으로 통과시키려면 어떤 패턴이 필요합니까?",
+      "ground_truth": "Protocol 클래스로 인터페이스를 선언하고 @runtime_checkable을 적용하면 isinstance 검사도 가능합니다. 선택적 메서드는 typing_extensions.Protocol에 명시하고, mypy --strict 모드에서 TypedDict/Protocol을 조합하여 계약을 표현합니다.",
       "reference_context": [
-        "Docker 문서는 컨테이너 이미지, 네트워크, 볼륨 구성에 초점을 둡니다.",
-        "AWS IAM MFA 정책은 AWS 보안 문서에서 확인해야 합니다."
+        "typing.Protocol은 구조적 서브타이핑을 제공합니다.",
+        "@runtime_checkable 데코레이터로 런타임 검사도 수행할 수 있습니다."
       ]
     },
     {
-      "id": 10,
+      "id": 9,
       "domain": "docker",
       "difficulty": "easy",
       "question": "컨테이너 로그를 실시간으로 확인하는 Docker CLI 명령은 무엇인가요?",
@@ -111,69 +100,80 @@
       ]
     },
     {
-      "id": 11,
+      "id": 10,
       "domain": "docker",
       "difficulty": "medium",
       "question": "Compose 파일에서 서비스 간 네트워크 격리를 유지하면서 공통 설정을 재사용하려면 어떤 기능을 쓰나요?",
-      "ground_truth": "docker-compose.yml에서 extension field(예: x-common-env)를 정의한 뒤 anchors/aliases로 include하고, services마다 별도 network를 지정합니다. 필요한 서비스에 depends_on과 network_mode를 설정해 격리를 유지합니다.",
+      "ground_truth": "docker-compose.yml에서 확장 필드(x-*)를 정의하고 YAML anchor/alias로 include하며, services마다 별도 networks를 지정합니다. 필요한 서비스에 depends_on과 network_mode를 설정해 격리를 유지합니다.",
       "reference_context": [
         "YAML anchor(&)와 alias(*)를 활용하면 설정을 재사용할 수 있습니다.",
         "Compose의 networks 섹션에서 서비스별 네트워크를 선언합니다."
       ]
     },
     {
-      "id": 12,
+      "id": 11,
       "domain": "docker",
       "difficulty": "hard",
       "question": "프로덕션에서 Docker 이미지를 서명하고 배포 파이프라인에서 검증하려면 어떤 워크플로를 구성해야 하나요?",
-      "ground_truth": "Docker Content Trust 또는 Notary v2를 사용해 이미지에 서명하고, CI/CD에서 docker build 후 docker trust sign을 실행합니다. 배포 단계에서는 DOCKER_CONTENT_TRUST=1 환경 변수를 통해 서명된 이미지만 pull하도록 강제하고, 레지스트리에서는 cosign/notation 정책으로 검증을 수행합니다.",
+      "ground_truth": "Docker Content Trust 또는 Notary v2로 이미지를 서명하고, CI/CD에서 docker build 후 docker trust sign을 실행합니다. 배포 단계에서는 DOCKER_CONTENT_TRUST=1을 사용해 서명된 이미지만 pull하고, 레지스트리에서는 cosign/notation 정책으로 검증합니다.",
       "reference_context": [
         "Docker Content Trust는 서명에 Notary를 사용합니다.",
         "cosign과 Notary v2는 레지스트리 측 검증 정책을 제공합니다."
       ]
     },
     {
-      "id": 13,
-      "domain": "aws",
-      "difficulty": "irrelevant",
-      "question": "Git 브랜치 전략을 수립할 때 trunk-based 개발의 장점은 무엇인가요?",
-      "ground_truth": "이 질문은 AWS 서비스와 관계가 없습니다. AWS 문서는 인프라와 서비스 사용법을 다루며 Git 브랜치 전략은 포함하지 않습니다.",
+      "id": 12,
+      "domain": "docker",
+      "difficulty": "advanced",
+      "question": "여러 CPU 아키텍처에 배포할 애플리케이션을 Docker Buildx로 빌드하면서 레이어 캐시를 공유하려면 어떤 절차를 따라야 합니까?",
+      "ground_truth": "docker buildx create로 builder를 만들고, buildx build --platform linux/amd64,linux/arm64 --push --provenance 옵션을 사용합니다. --cache-to/--cache-from=type=registry 매개변수로 레이어 캐시를 유지하고, BuildKit 인스턴스에는 TLS 자격 증명을 설정합니다.",
       "reference_context": [
-        "AWS 아티클은 클라우드 서비스 구성에 집중합니다.",
-        "브랜치 전략은 소프트웨어 공학/버전 관리 문서에서 확인해야 합니다."
+        "docker buildx build --platform은 멀티 아키텍처 이미지를 생성합니다.",
+        "--cache-to/--cache-from=type=registry로 원격 레이어 캐시를 재사용할 수 있습니다."
       ]
     },
     {
-      "id": 14,
+      "id": 13,
       "domain": "aws",
       "difficulty": "easy",
       "question": "AWS S3 버킷에 정적 웹사이트를 호스팅하려면 어떤 설정이 필요합니까?",
-      "ground_truth": "S3 콘솔에서 버킷 속성의 Static website hosting을 활성화하고 index.html, error.html을 지정합니다. 버킷 정책으로 public read를 허용하거나 CloudFront와 OAC를 사용해 배포합니다.",
+      "ground_truth": "S3 콘솔에서 Static website hosting을 활성화하고 index.html, error.html을 지정합니다. 버킷 정책으로 public read를 허용하거나 CloudFront와 OAC를 사용해 배포합니다.",
       "reference_context": [
         "Static website hosting 옵션에서 엔드포인트를 제공합니다.",
         "버킷 정책 또는 CloudFront로 접근 제어를 설정합니다."
       ]
     },
     {
-      "id": 15,
+      "id": 14,
       "domain": "aws",
       "difficulty": "medium",
       "question": "Amazon RDS 멀티 AZ 배포에서 장애 조치(failover)가 발생하면 애플리케이션에서 어떤 점을 고려해야 하나요?",
-      "ground_truth": "멀티 AZ 구성에서는 장애 발생 시 보조 인스턴스가 자동으로 승격되므로 애플리케이션은 RDS 엔드포인트에 재연결해야 합니다. 커넥션 풀을 사용한다면 DNS TTL을 짧게 유지하고 재시도 로직을 구현해야 합니다.",
+      "ground_truth": "멀티 AZ 구성에서는 장애 시 보조 인스턴스가 자동 승격되므로 애플리케이션은 RDS 엔드포인트에 재연결해야 합니다. DNS TTL을 짧게 유지하고 재시도 로직을 구현하면 failover 후 빠르게 복구할 수 있습니다.",
       "reference_context": [
         "멀티 AZ는 동기식 복제를 사용합니다.",
         "failover 후 엔드포인트는 동일하지만 DNS 캐시를 비워야 할 수 있습니다."
       ]
     },
     {
-      "id": 16,
+      "id": 15,
       "domain": "aws",
       "difficulty": "hard",
       "question": "AWS Control Tower로 여러 계정을 운영하면서 조직 전체에 CloudTrail과 Config 규칙을 강제하려면 어떤 구성 요소를 활용하나요?",
-      "ground_truth": "Control Tower의 가드레일을 활성화하고, AWS Organizations의 서비스 링크드 역할을 통해 모든 계정에 CloudTrail Organization Trail을 배포합니다. AWS Config는 Aggregator와 conformance packs를 사용해 중앙 계정에서 규칙 준수를 모니터링합니다.",
+      "ground_truth": "Control Tower 가드레일을 활성화하고 AWS Organizations 서비스 링크드 역할을 통해 Organization Trail을 배포합니다. AWS Config는 Aggregator와 conformance packs를 사용해 중앙 계정에서 규칙 준수를 모니터링합니다.",
       "reference_context": [
         "Organization Trail은 모든 계정의 이벤트를 중앙 버킷으로 전송합니다.",
         "Config Aggregator는 여러 계정/리전을 한 곳에서 평가합니다."
+      ]
+    },
+    {
+      "id": 16,
+      "domain": "aws",
+      "difficulty": "advanced",
+      "question": "서로 다른 AWS 계정·리전에 분산된 애플리케이션 이벤트를 중앙 EventBridge 버스로 수집하고 재배포하려면 어떤 구성이 필요합니까?",
+      "ground_truth": "각 계정에서 EventBridge 규칙을 만들어 조직 계정의 커스텀 버스로 이벤트를 전송하고, 중앙 버스 정책으로 cross-account 송신을 허용합니다. 글로벌 엔드포인트로 다중 리전 장애 조치를 구성하고, 재배포 규칙으로 Lambda/SNS/Step Functions를 타깃에 연결합니다.",
+      "reference_context": [
+        "EventBridge 버스 정책은 계정 간 publish/subscribe를 제어합니다.",
+        "글로벌 엔드포인트는 다중 리전 장애 조치에 사용됩니다."
       ]
     }
   ]
