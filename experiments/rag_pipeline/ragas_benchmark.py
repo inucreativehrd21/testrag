@@ -241,8 +241,20 @@ class RagasBenchmark:
 
         logger.info("Metrics computation complete!")
 
-        # Add metadata to results
+        # Convert to DataFrame and add original data
         results_df = result.to_pandas()
+
+        # Add original question data (Ragas may not include these in output)
+        if 'question' not in results_df.columns:
+            results_df['question'] = questions
+        if 'answer' not in results_df.columns:
+            results_df['answer'] = answers
+        if 'contexts' not in results_df.columns:
+            results_df['contexts'] = contexts
+        if 'ground_truth' not in results_df.columns:
+            results_df['ground_truth'] = ground_truths
+
+        # Add metadata
         for key in metadata[0].keys():
             results_df[key] = [m[key] for m in metadata]
 
@@ -298,23 +310,41 @@ class RagasBenchmark:
         json_path = self.output_dir / f"{base_name}.json"
 
         # Prepare JSON-serializable results
+        # Convert DataFrame to dict, handling complex types
+        df_dict = results['dataframe'].copy()
+
+        # Convert contexts (list of lists) to JSON-serializable format
+        if 'contexts' in df_dict.columns:
+            df_dict['contexts'] = df_dict['contexts'].apply(
+                lambda x: x if isinstance(x, list) else []
+            )
+
         json_results = {
             'timestamp': timestamp,
-            'config_path': self.config_path,
-            'questions_path': self.questions_path,
+            'config_path': str(self.config_path),
+            'questions_path': str(self.questions_path),
             'num_questions': len(self.questions_data['questions']),
-            'summary': results['summary'],
-            'detailed_results': results['dataframe'].to_dict(orient='records')
+            'summary': {k: float(v) if v is not None else 0.0
+                       for k, v in results['summary'].items()},
+            'detailed_results': df_dict.to_dict(orient='records')
         }
 
         with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(json_results, f, ensure_ascii=False, indent=2)
+            json.dump(json_results, f, ensure_ascii=False, indent=2, default=str)
 
         logger.info(f"Saved JSON results to: {json_path}")
 
-        # Save as CSV
+        # Save as CSV (convert complex types to strings)
         csv_path = self.output_dir / f"{base_name}.csv"
-        results['dataframe'].to_csv(csv_path, index=False, encoding='utf-8')
+        df_csv = results['dataframe'].copy()
+
+        # Convert contexts list to string for CSV
+        if 'contexts' in df_csv.columns:
+            df_csv['contexts'] = df_csv['contexts'].apply(
+                lambda x: str(x) if not isinstance(x, str) else x
+            )
+
+        df_csv.to_csv(csv_path, index=False, encoding='utf-8')
         logger.info(f"Saved CSV results to: {csv_path}")
 
         # Save summary report
@@ -354,50 +384,74 @@ class RagasBenchmark:
             f.write("METRICS BY DIFFICULTY\n")
             f.write("-"*70 + "\n")
 
-            for difficulty in ['easy', 'medium', 'hard']:
-                subset = df[df['difficulty'] == difficulty]
-                if len(subset) > 0:
-                    f.write(f"\n{difficulty.upper()} ({len(subset)} questions):\n")
-                    f.write(f"  Context Precision:   {subset['context_precision'].mean():.4f}\n")
-                    f.write(f"  Context Recall:      {subset['context_recall'].mean():.4f}\n")
-                    f.write(f"  Faithfulness:        {subset['faithfulness'].mean():.4f}\n")
-                    f.write(f"  Answer Relevancy:    {subset['answer_relevancy'].mean():.4f}\n")
-                    f.write(f"  Answer Correctness:  {subset['answer_correctness'].mean():.4f}\n")
+            if 'difficulty' in df.columns:
+                for difficulty in ['easy', 'medium', 'hard']:
+                    subset = df[df['difficulty'] == difficulty]
+                    if len(subset) > 0:
+                        f.write(f"\n{difficulty.upper()} ({len(subset)} questions):\n")
+                        if 'context_precision' in df.columns:
+                            f.write(f"  Context Precision:   {subset['context_precision'].mean():.4f}\n")
+                        if 'context_recall' in df.columns:
+                            f.write(f"  Context Recall:      {subset['context_recall'].mean():.4f}\n")
+                        if 'faithfulness' in df.columns:
+                            f.write(f"  Faithfulness:        {subset['faithfulness'].mean():.4f}\n")
+                        if 'answer_relevancy' in df.columns:
+                            f.write(f"  Answer Relevancy:    {subset['answer_relevancy'].mean():.4f}\n")
+                        if 'answer_correctness' in df.columns:
+                            f.write(f"  Answer Correctness:  {subset['answer_correctness'].mean():.4f}\n")
 
             # Metrics by domain
             f.write("\n" + "-"*70 + "\n")
             f.write("METRICS BY DOMAIN\n")
             f.write("-"*70 + "\n")
 
-            for domain in df['domain'].unique():
-                subset = df[df['domain'] == domain]
-                f.write(f"\n{domain.upper()} ({len(subset)} questions):\n")
-                f.write(f"  Context Precision:   {subset['context_precision'].mean():.4f}\n")
-                f.write(f"  Context Recall:      {subset['context_recall'].mean():.4f}\n")
-                f.write(f"  Faithfulness:        {subset['faithfulness'].mean():.4f}\n")
-                f.write(f"  Answer Relevancy:    {subset['answer_relevancy'].mean():.4f}\n")
-                f.write(f"  Answer Correctness:  {subset['answer_correctness'].mean():.4f}\n")
+            if 'domain' in df.columns:
+                for domain in df['domain'].unique():
+                    subset = df[df['domain'] == domain]
+                    f.write(f"\n{domain.upper()} ({len(subset)} questions):\n")
+                    if 'context_precision' in df.columns:
+                        f.write(f"  Context Precision:   {subset['context_precision'].mean():.4f}\n")
+                    if 'context_recall' in df.columns:
+                        f.write(f"  Context Recall:      {subset['context_recall'].mean():.4f}\n")
+                    if 'faithfulness' in df.columns:
+                        f.write(f"  Faithfulness:        {subset['faithfulness'].mean():.4f}\n")
+                    if 'answer_relevancy' in df.columns:
+                        f.write(f"  Answer Relevancy:    {subset['answer_relevancy'].mean():.4f}\n")
+                    if 'answer_correctness' in df.columns:
+                        f.write(f"  Answer Correctness:  {subset['answer_correctness'].mean():.4f}\n")
 
             # Top and bottom performers
             f.write("\n" + "-"*70 + "\n")
             f.write("TOP 3 QUESTIONS (by answer_relevancy)\n")
             f.write("-"*70 + "\n")
 
-            top_3 = df.nlargest(3, 'answer_relevancy')
-            for idx, row in top_3.iterrows():
-                f.write(f"\nQ{row['id']}: {row['question'][:60]}...\n")
-                f.write(f"  Relevancy: {row['answer_relevancy']:.4f} | ")
-                f.write(f"Faithfulness: {row['faithfulness']:.4f}\n")
+            if 'answer_relevancy' in df.columns and len(df) > 0:
+                top_3 = df.nlargest(min(3, len(df)), 'answer_relevancy')
+                for idx, row in top_3.iterrows():
+                    q_id = row.get('id', idx)
+                    question = str(row.get('question', ''))[:60]
+                    relevancy = row.get('answer_relevancy', 0.0)
+                    faith = row.get('faithfulness', 0.0)
+
+                    f.write(f"\nQ{q_id}: {question}...\n")
+                    f.write(f"  Relevancy: {relevancy:.4f} | ")
+                    f.write(f"Faithfulness: {faith:.4f}\n")
 
             f.write("\n" + "-"*70 + "\n")
             f.write("BOTTOM 3 QUESTIONS (by answer_relevancy)\n")
             f.write("-"*70 + "\n")
 
-            bottom_3 = df.nsmallest(3, 'answer_relevancy')
-            for idx, row in bottom_3.iterrows():
-                f.write(f"\nQ{row['id']}: {row['question'][:60]}...\n")
-                f.write(f"  Relevancy: {row['answer_relevancy']:.4f} | ")
-                f.write(f"Faithfulness: {row['faithfulness']:.4f}\n")
+            if 'answer_relevancy' in df.columns and len(df) > 0:
+                bottom_3 = df.nsmallest(min(3, len(df)), 'answer_relevancy')
+                for idx, row in bottom_3.iterrows():
+                    q_id = row.get('id', idx)
+                    question = str(row.get('question', ''))[:60]
+                    relevancy = row.get('answer_relevancy', 0.0)
+                    faith = row.get('faithfulness', 0.0)
+
+                    f.write(f"\nQ{q_id}: {question}...\n")
+                    f.write(f"  Relevancy: {relevancy:.4f} | ")
+                    f.write(f"Faithfulness: {faith:.4f}\n")
 
             f.write("\n" + "="*70 + "\n")
 
