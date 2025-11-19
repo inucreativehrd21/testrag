@@ -388,11 +388,12 @@ Python의 가상환경은 왜 사용하나요?
 
 Evaluate RAG pipeline quality using [Ragas](https://github.com/explodinggradients/ragas) metrics.
 
-**Ragas Metrics**:
-- **Context Precision**: Relevance of retrieved contexts
-- **Context Recall**: Coverage of ground truth in retrieved contexts
+**Ragas Metrics** (5 core metrics):
+- **Context Precision**: Relevance of retrieved contexts to the question
+- **Context Recall**: Coverage of ground truth information in retrieved contexts
 - **Faithfulness**: How faithful the answer is to the context (no hallucination)
 - **Answer Relevancy**: Relevance of answer to the question
+- **Answer Correctness**: Accuracy of answer compared to ground truth
 
 **Command**:
 ```bash
@@ -448,7 +449,8 @@ The default `ragas_questions.json` includes 15 curated questions:
     "context_precision": 0.8245,
     "context_recall": 0.7891,
     "faithfulness": 0.9123,
-    "answer_relevancy": 0.8567
+    "answer_relevancy": 0.8567,
+    "answer_correctness": 0.8234
   },
   "detailed_results": [...]
 }
@@ -456,7 +458,7 @@ The default `ragas_questions.json` includes 15 curated questions:
 
 2. **CSV Results** (`ragas_eval_TIMESTAMP.csv`):
 ```csv
-question,answer,contexts,ground_truth,context_precision,context_recall,faithfulness,answer_relevancy,id,difficulty,domain
+question,answer,contexts,ground_truth,context_precision,context_recall,faithfulness,answer_relevancy,answer_correctness,id,difficulty,domain
 ```
 
 3. **Report** (`ragas_eval_TIMESTAMP_report.txt`):
@@ -467,30 +469,34 @@ RAGAS EVALUATION REPORT
 
 OVERALL METRICS
 ----------------------------------------------------------------------
-Context Precision:  0.8245
-Context Recall:     0.7891
-Faithfulness:       0.9123
-Answer Relevancy:   0.8567
+Context Precision:   0.8245
+Context Recall:      0.7891
+Faithfulness:        0.9123
+Answer Relevancy:    0.8567
+Answer Correctness:  0.8234
 
 METRICS BY DIFFICULTY
 ----------------------------------------------------------------------
 EASY (5 questions):
-  Context Precision: 0.8654
-  Context Recall:    0.8234
-  Faithfulness:      0.9345
-  Answer Relevancy:  0.8912
+  Context Precision:   0.8654
+  Context Recall:      0.8234
+  Faithfulness:        0.9345
+  Answer Relevancy:    0.8912
+  Answer Correctness:  0.8756
 
 MEDIUM (6 questions):
-  Context Precision: 0.8123
-  Context Recall:    0.7789
-  Faithfulness:      0.9012
-  Answer Relevancy:  0.8456
+  Context Precision:   0.8123
+  Context Recall:      0.7789
+  Faithfulness:        0.9012
+  Answer Relevancy:    0.8456
+  Answer Correctness:  0.8123
 
 HARD (4 questions):
-  Context Precision: 0.7912
-  Context Recall:    0.7456
-  Faithfulness:      0.8934
-  Answer Relevancy:  0.8234
+  Context Precision:   0.7912
+  Context Recall:      0.7456
+  Faithfulness:        0.8934
+  Answer Relevancy:    0.8234
+  Answer Correctness:  0.7891
 ```
 
 **Installation**:

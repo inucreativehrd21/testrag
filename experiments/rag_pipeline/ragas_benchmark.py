@@ -31,6 +31,7 @@ try:
         context_recall,
         faithfulness,
         answer_relevancy,
+        answer_correctness,
     )
     from datasets import Dataset
 except ImportError:
@@ -234,6 +235,7 @@ class RagasBenchmark:
                 context_recall,
                 faithfulness,
                 answer_relevancy,
+                answer_correctness,
             ],
         )
 
@@ -244,16 +246,34 @@ class RagasBenchmark:
         for key in metadata[0].keys():
             results_df[key] = [m[key] for m in metadata]
 
+        # Calculate summary statistics (Ragas returns lists, so we compute means)
+        def safe_mean(values):
+            """Calculate mean, handling both lists and scalars"""
+            if isinstance(values, (list, tuple)):
+                valid_values = [v for v in values if v is not None and not pd.isna(v)]
+                return sum(valid_values) / len(valid_values) if valid_values else 0.0
+            return float(values) if values is not None else 0.0
+
+        summary = {
+            'context_precision': safe_mean(result['context_precision']),
+            'context_recall': safe_mean(result['context_recall']),
+            'faithfulness': safe_mean(result['faithfulness']),
+            'answer_relevancy': safe_mean(result['answer_relevancy']),
+            'answer_correctness': safe_mean(result['answer_correctness']),
+        }
+
+        logger.info(f"\nSummary Metrics:")
+        logger.info(f"  Context Precision:   {summary['context_precision']:.4f}")
+        logger.info(f"  Context Recall:      {summary['context_recall']:.4f}")
+        logger.info(f"  Faithfulness:        {summary['faithfulness']:.4f}")
+        logger.info(f"  Answer Relevancy:    {summary['answer_relevancy']:.4f}")
+        logger.info(f"  Answer Correctness:  {summary['answer_correctness']:.4f}")
+
         return {
             'dataset': result,
             'dataframe': results_df,
             'metadata': metadata,
-            'summary': {
-                'context_precision': result['context_precision'],
-                'context_recall': result['context_recall'],
-                'faithfulness': result['faithfulness'],
-                'answer_relevancy': result['answer_relevancy'],
-            }
+            'summary': summary
         }
 
     def save_results(self, results: Dict[str, Any], output_name: str = None) -> str:
@@ -323,10 +343,11 @@ class RagasBenchmark:
             f.write("-"*70 + "\n")
             f.write("OVERALL METRICS\n")
             f.write("-"*70 + "\n")
-            f.write(f"Context Precision:  {summary['context_precision']:.4f}\n")
-            f.write(f"Context Recall:     {summary['context_recall']:.4f}\n")
-            f.write(f"Faithfulness:       {summary['faithfulness']:.4f}\n")
-            f.write(f"Answer Relevancy:   {summary['answer_relevancy']:.4f}\n\n")
+            f.write(f"Context Precision:   {summary['context_precision']:.4f}\n")
+            f.write(f"Context Recall:      {summary['context_recall']:.4f}\n")
+            f.write(f"Faithfulness:        {summary['faithfulness']:.4f}\n")
+            f.write(f"Answer Relevancy:    {summary['answer_relevancy']:.4f}\n")
+            f.write(f"Answer Correctness:  {summary['answer_correctness']:.4f}\n\n")
 
             # Metrics by difficulty
             f.write("-"*70 + "\n")
@@ -337,10 +358,11 @@ class RagasBenchmark:
                 subset = df[df['difficulty'] == difficulty]
                 if len(subset) > 0:
                     f.write(f"\n{difficulty.upper()} ({len(subset)} questions):\n")
-                    f.write(f"  Context Precision: {subset['context_precision'].mean():.4f}\n")
-                    f.write(f"  Context Recall:    {subset['context_recall'].mean():.4f}\n")
-                    f.write(f"  Faithfulness:      {subset['faithfulness'].mean():.4f}\n")
-                    f.write(f"  Answer Relevancy:  {subset['answer_relevancy'].mean():.4f}\n")
+                    f.write(f"  Context Precision:   {subset['context_precision'].mean():.4f}\n")
+                    f.write(f"  Context Recall:      {subset['context_recall'].mean():.4f}\n")
+                    f.write(f"  Faithfulness:        {subset['faithfulness'].mean():.4f}\n")
+                    f.write(f"  Answer Relevancy:    {subset['answer_relevancy'].mean():.4f}\n")
+                    f.write(f"  Answer Correctness:  {subset['answer_correctness'].mean():.4f}\n")
 
             # Metrics by domain
             f.write("\n" + "-"*70 + "\n")
@@ -350,10 +372,11 @@ class RagasBenchmark:
             for domain in df['domain'].unique():
                 subset = df[df['domain'] == domain]
                 f.write(f"\n{domain.upper()} ({len(subset)} questions):\n")
-                f.write(f"  Context Precision: {subset['context_precision'].mean():.4f}\n")
-                f.write(f"  Context Recall:    {subset['context_recall'].mean():.4f}\n")
-                f.write(f"  Faithfulness:      {subset['faithfulness'].mean():.4f}\n")
-                f.write(f"  Answer Relevancy:  {subset['answer_relevancy'].mean():.4f}\n")
+                f.write(f"  Context Precision:   {subset['context_precision'].mean():.4f}\n")
+                f.write(f"  Context Recall:      {subset['context_recall'].mean():.4f}\n")
+                f.write(f"  Faithfulness:        {subset['faithfulness'].mean():.4f}\n")
+                f.write(f"  Answer Relevancy:    {subset['answer_relevancy'].mean():.4f}\n")
+                f.write(f"  Answer Correctness:  {subset['answer_correctness'].mean():.4f}\n")
 
             # Top and bottom performers
             f.write("\n" + "-"*70 + "\n")
@@ -387,10 +410,11 @@ class RagasBenchmark:
         print("RAGAS EVALUATION SUMMARY")
         print("="*70)
         print(f"\nOverall Metrics:")
-        print(f"  Context Precision:  {summary['context_precision']:.4f}")
-        print(f"  Context Recall:     {summary['context_recall']:.4f}")
-        print(f"  Faithfulness:       {summary['faithfulness']:.4f}")
-        print(f"  Answer Relevancy:   {summary['answer_relevancy']:.4f}")
+        print(f"  Context Precision:   {summary['context_precision']:.4f}")
+        print(f"  Context Recall:      {summary['context_recall']:.4f}")
+        print(f"  Faithfulness:        {summary['faithfulness']:.4f}")
+        print(f"  Answer Relevancy:    {summary['answer_relevancy']:.4f}")
+        print(f"  Answer Correctness:  {summary['answer_correctness']:.4f}")
 
         print(f"\nBy Difficulty:")
         for difficulty in ['easy', 'medium', 'hard']:
