@@ -109,11 +109,16 @@ class RagasBenchmark:
         # Retrieve contexts
         contexts_with_scores = self.pipeline.retrieve(question)
 
-        # Extract context texts
-        contexts = [ctx['text'] for ctx in contexts_with_scores]
+        # Extract context texts (handle both dict and str formats)
+        contexts: List[str] = []
+        for ctx in contexts_with_scores:
+            if isinstance(ctx, dict):
+                contexts.append(ctx.get("text", ""))
+            else:
+                contexts.append(str(ctx))
 
-        # Generate answer
-        answer = self.pipeline.generate(question, contexts_with_scores)
+        # Generate answer using the retrieved contexts
+        answer = self._generate_answer(question, contexts, decision)
 
         return {
             'answer': answer,
@@ -121,6 +126,35 @@ class RagasBenchmark:
             'decision': decision,
             'num_contexts': len(contexts)
         }
+
+    def _generate_answer(self, question: str, contexts: List[str], decision) -> str:
+        """Generate answer using existing contexts to avoid duplicate retrieval."""
+        if not contexts:
+            logger.warning("No contexts retrieved, returning fallback message")
+            return "관련 문서를 찾지 못했습니다."
+
+        context_block = "\n\n".join(f"근거 {i + 1}: {chunk}" for i, chunk in enumerate(contexts))
+        messages = [
+            {"role": "system", "content": self.pipeline.system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"질문 유형: {decision.reason}\n질문: {question}\n\n"
+                    f"컨텍스트:\n{context_block}\n\n"
+                    "지침: 근거를 인용하며 한국어로 답변하고, 추가 확인이 필요하면 명시하세요."
+                ),
+            },
+        ]
+
+        llm_cfg = self.pipeline.llm_cfg
+        response = self.pipeline.llm_client.chat.completions.create(
+            model=llm_cfg["model_name"],
+            messages=messages,
+            temperature=llm_cfg.get("temperature", 0.2),
+            top_p=llm_cfg.get("top_p", 0.9),
+            max_tokens=llm_cfg.get("max_new_tokens", 300),
+        )
+        return response.choices[0].message.content.strip()
 
     def run_evaluation(self) -> Dict[str, Any]:
         """
