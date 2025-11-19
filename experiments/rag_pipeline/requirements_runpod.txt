@@ -31,3 +31,7 @@ pydantic==2.5.3
 # Supporting libraries
 huggingface-hub==0.22.2
 requests==2.31.0
+
+# Evaluation / Benchmarking
+ragas>=0.1.0
+datasets>=2.14.0

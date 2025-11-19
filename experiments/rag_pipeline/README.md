@@ -14,6 +14,7 @@ A production-ready Retrieval-Augmented Generation (RAG) pipeline for answering d
   - [Question Answering](#question-answering)
   - [API Server](#api-server)
   - [Batch Evaluation](#batch-evaluation)
+  - [Ragas Benchmark](#ragas-benchmark)
 - [Configuration](#configuration)
 - [Logging](#logging)
 - [Development](#development)
@@ -382,6 +383,136 @@ Python의 가상환경은 왜 사용하나요?
   }
 }
 ```
+
+### Ragas Benchmark
+
+Evaluate RAG pipeline quality using [Ragas](https://github.com/explodinggradients/ragas) metrics.
+
+**Ragas Metrics**:
+- **Context Precision**: Relevance of retrieved contexts
+- **Context Recall**: Coverage of ground truth in retrieved contexts
+- **Faithfulness**: How faithful the answer is to the context (no hallucination)
+- **Answer Relevancy**: Relevance of answer to the question
+
+**Command**:
+```bash
+python ragas_benchmark.py [OPTIONS]
+```
+
+**Options**:
+- `--config`: Path to RAG config file (default: `config/base.yaml`)
+- `--questions`: Path to questions JSON file (default: `ragas_questions.json`)
+- `--output-dir`: Output directory (default: `artifacts/ragas_evals`)
+- `--output-name`: Custom output file name
+
+**Example**:
+```bash
+# Run benchmark with default questions
+python ragas_benchmark.py
+
+# Use custom questions
+python ragas_benchmark.py --questions my_questions.json --output-name my_eval
+```
+
+**Questions File Format** (`ragas_questions.json`):
+```json
+{
+  "questions": [
+    {
+      "id": 1,
+      "difficulty": "easy",
+      "domain": "git",
+      "question": "Git에서 브랜치를 생성하는 명령어는 무엇인가요?",
+      "ground_truth": "git branch <브랜치명> 명령어로 새로운 브랜치를 생성할 수 있습니다...",
+      "reference_context": ["git branch 명령어는...", "..."]
+    }
+  ]
+}
+```
+
+**Included Questions**:
+The default `ragas_questions.json` includes 15 curated questions:
+- **5 Easy**: Basic factual questions (commands, definitions)
+- **6 Medium**: Conceptual understanding (comparisons, use cases)
+- **4 Hard**: Complex integration scenarios (multi-step reasoning)
+- **Domains**: git, python, docker, aws, integration
+
+**Output Files**:
+
+1. **JSON Results** (`ragas_eval_TIMESTAMP.json`):
+```json
+{
+  "timestamp": "20251119_031500",
+  "num_questions": 15,
+  "summary": {
+    "context_precision": 0.8245,
+    "context_recall": 0.7891,
+    "faithfulness": 0.9123,
+    "answer_relevancy": 0.8567
+  },
+  "detailed_results": [...]
+}
+```
+
+2. **CSV Results** (`ragas_eval_TIMESTAMP.csv`):
+```csv
+question,answer,contexts,ground_truth,context_precision,context_recall,faithfulness,answer_relevancy,id,difficulty,domain
+```
+
+3. **Report** (`ragas_eval_TIMESTAMP_report.txt`):
+```
+======================================================================
+RAGAS EVALUATION REPORT
+======================================================================
+
+OVERALL METRICS
+----------------------------------------------------------------------
+Context Precision:  0.8245
+Context Recall:     0.7891
+Faithfulness:       0.9123
+Answer Relevancy:   0.8567
+
+METRICS BY DIFFICULTY
+----------------------------------------------------------------------
+EASY (5 questions):
+  Context Precision: 0.8654
+  Context Recall:    0.8234
+  Faithfulness:      0.9345
+  Answer Relevancy:  0.8912
+
+MEDIUM (6 questions):
+  Context Precision: 0.8123
+  Context Recall:    0.7789
+  Faithfulness:      0.9012
+  Answer Relevancy:  0.8456
+
+HARD (4 questions):
+  Context Precision: 0.7912
+  Context Recall:    0.7456
+  Faithfulness:      0.8934
+  Answer Relevancy:  0.8234
+```
+
+**Installation**:
+```bash
+# Ragas dependencies already in requirements.txt
+pip install -r requirements.txt
+
+# Or install separately
+pip install ragas datasets
+```
+
+**Notes**:
+- Ragas evaluation requires an OpenAI API key (uses GPT for metric computation)
+- First run will download Ragas models (~500MB)
+- Evaluation takes ~5-10 minutes for 15 questions
+- Results are saved to `artifacts/ragas_evals/` directory
+
+**Interpreting Results**:
+- **0.9-1.0**: Excellent - production ready
+- **0.8-0.9**: Good - minor improvements needed
+- **0.7-0.8**: Fair - needs optimization
+- **< 0.7**: Poor - major issues
 
 ## Configuration
 
