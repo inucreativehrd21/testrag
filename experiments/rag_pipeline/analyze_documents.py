@@ -18,6 +18,21 @@ plt.rcParams['figure.figsize'] = (14, 10)
 plt.rcParams['font.size'] = 10
 
 
+def convert_to_serializable(obj):
+    """Convert numpy/pandas types to native Python types for JSON serialization"""
+    if isinstance(obj, (np.integer, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    return obj
+
+
 def analyze_chunks(chunks_path: str, output_dir: str = "artifacts/analysis"):
     """Comprehensive analysis of document chunks"""
 
@@ -253,6 +268,9 @@ Rationale:
             }
         }
     }
+
+    # Convert numpy/pandas types to native Python types for JSON serialization
+    stats_output = convert_to_serializable(stats_output)
 
     stats_path = output_path / "statistics.json"
     with open(stats_path, 'w', encoding='utf-8') as f:
