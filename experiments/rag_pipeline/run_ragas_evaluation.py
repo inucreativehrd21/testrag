@@ -14,7 +14,7 @@ from typing import Dict, List
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from answerer_v2 import EnhancedRAGPipeline, setup_logging
+from answerer_v2_optimized import EnhancedRAGPipeline, setup_logging
 
 # RAGAS imports
 try:
