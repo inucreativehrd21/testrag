@@ -50,4 +50,4 @@ llm:
   max_new_tokens: 300
   temperature: 0.2
   top_p: 0.9
-  system_prompt_path: prompts/system.txt
+  system_prompt_path: prompts/system_v2.txt  # Optimized: concise, natural, Constitutional AI
