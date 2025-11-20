@@ -399,6 +399,58 @@ class EnhancedRAGPipeline:
 
         return answer
 
+    def answer_with_contexts(self, question: str) -> Tuple[str, List[str]]:
+        """
+        Generate answer and return contexts (for RAGAS evaluation)
+
+        OPTIMIZATION: Prevents double retrieve() calls in evaluation
+
+        Returns:
+            tuple: (answer: str, contexts: List[str])
+        """
+        logger.info(f"Answering question with contexts: {question[:100]}...")
+        total_start = time.time()
+
+        # Route query
+        decision = self.router.classify(question)
+        logger.debug(f"Query routing: {decision.difficulty}, {decision.reason}")
+
+        # Retrieve contexts with metadatas
+        contexts, metadatas = self.retrieve(question)
+        if not contexts:
+            logger.warning("No contexts retrieved")
+            return "관련 문서를 찾지 못했습니다. 질문을 다르게 표현해보시겠어요?", []
+
+        # Format context with metadata
+        context_block = "\n\n".join(
+            f"[문서 {i+1}] {meta.get('domain', 'unknown')} | chunk {meta.get('chunk_id', 'unknown')[-8:]}\n{ctx}"
+            for i, (ctx, meta) in enumerate(zip(contexts, metadatas))
+        )
+        logger.debug(f"Formatted {len(contexts)} contexts with metadata for LLM")
+
+        # Call LLM
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": f"질문: {question}\n\n컨텍스트:\n{context_block}"}
+        ]
+
+        llm_start = time.time()
+        response = self.llm_client.chat.completions.create(
+            model=self.llm_cfg["model_name"],
+            messages=messages,
+            temperature=self.llm_cfg.get("temperature", 0.2),
+            max_tokens=self.llm_cfg.get("max_new_tokens", 300),
+            top_p=self.llm_cfg.get("top_p", 0.9)
+        )
+        answer = response.choices[0].message.content
+        llm_time = time.time() - llm_start
+
+        total_time = time.time() - total_start
+        logger.info(f"Answer generated in {llm_time:.2f}s, total: {total_time:.2f}s")
+
+        # Return answer and contexts (for RAGAS)
+        return answer, contexts
+
 
 def setup_logging(level: str = "INFO"):
     """Configure logging"""

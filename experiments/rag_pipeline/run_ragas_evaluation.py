@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+import numpy as np
+
 # Add parent to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -30,6 +32,23 @@ try:
 except ImportError:
     print("Error: RAGAS not installed. Install with: pip install ragas datasets")
     sys.exit(1)
+
+
+def convert_to_serializable(obj):
+    """Convert numpy/pandas types to native Python types for JSON serialization"""
+    if isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {k: convert_to_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_serializable(item) for item in obj)
+    return obj
 
 
 def load_evaluation_questions(file_path: str = "ragas_evaluation_questions.json") -> List[Dict]:
@@ -60,11 +79,8 @@ def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> Li
         try:
             start_time = time.time()
 
-            # Get contexts and metadatas (retrieve returns tuple)
-            contexts, metadatas = pipeline.retrieve(question_text)
-
-            # Get answer
-            answer = pipeline.answer(question_text)
+            # OPTIMIZATION: Use answer_with_contexts() to avoid double retrieve()
+            answer, contexts = pipeline.answer_with_contexts(question_text)
 
             elapsed = time.time() - start_time
             total_time += elapsed
@@ -158,7 +174,16 @@ def run_ragas_evaluation(dataset: Dataset) -> Dict:
 
     logger.info(f"\n✓ RAGAS evaluation completed in {eval_time:.2f}s ({eval_time/60:.1f} min)")
 
-    return evaluation_result
+    # Convert EvaluationResult to dict for JSON serialization
+    ragas_scores = {
+        'context_precision': float(evaluation_result['context_precision']),
+        'context_recall': float(evaluation_result['context_recall']),
+        'faithfulness': float(evaluation_result['faithfulness']),
+        'answer_relevancy': float(evaluation_result['answer_relevancy']),
+        'answer_correctness': float(evaluation_result['answer_correctness']),
+    }
+
+    return ragas_scores
 
 
 def save_results(
@@ -174,16 +199,20 @@ def save_results(
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Save detailed results
+    # Save detailed results (convert to serializable first)
     results_file = output_path / f"ragas_eval_{timestamp}_detailed.json"
+    output_data = {
+        "timestamp": timestamp,
+        "total_questions": len(results),
+        "successful": sum(1 for r in results if r["success"]),
+        "ragas_scores": ragas_scores,
+        "results": results
+    }
+    # Convert numpy types to native Python types
+    output_data = convert_to_serializable(output_data)
+
     with open(results_file, "w", encoding="utf-8") as f:
-        json.dump({
-            "timestamp": timestamp,
-            "total_questions": len(results),
-            "successful": sum(1 for r in results if r["success"]),
-            "ragas_scores": ragas_scores,
-            "results": results
-        }, f, ensure_ascii=False, indent=2)
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
 
     logger.info(f"✓ Detailed results saved to {results_file}")
 
