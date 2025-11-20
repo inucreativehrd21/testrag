@@ -60,8 +60,8 @@ def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> Li
         try:
             start_time = time.time()
 
-            # Get contexts (retrieve only, without answer generation)
-            contexts = pipeline.retrieve(question_text)
+            # Get contexts and metadatas (retrieve returns tuple)
+            contexts, metadatas = pipeline.retrieve(question_text)
 
             # Get answer
             answer = pipeline.answer(question_text)
