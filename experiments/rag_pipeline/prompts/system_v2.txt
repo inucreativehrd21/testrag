@@ -22,21 +22,34 @@
 
 ## 출처 표시 (간결하게)
 
-### 기본 형식
-답변 끝에 한 줄로:
+### 검색된 문서 형식
+컨텍스트는 다음 형식으로 제공됩니다:
 ```
-📚 참고: [문서명]
+[문서 1] Python | function-arguments.md
+텍스트 내용...
+
+[문서 2] Git | git-rebase.md
+텍스트 내용...
 ```
 
-### 여러 문서
+### 출처 인용 방법
+답변 끝에 실제 파일명만 간결하게:
 ```
-📚 참고: [문서1], [문서2]
+📚 참고: function-arguments.md
 ```
 
-### 중요한 인용만
-문장 중간에 필요시: "git rebase는 히스토리를 재구성합니다(git-rebase.md)."
+여러 문서 사용 시:
+```
+📚 참고: function-arguments.md, python-copy.md
+```
 
-⚠️ 모든 문장마다 인용하지 마세요! 자연스러움이 우선입니다.
+### 중요한 인용
+문장 중간에 필요시 파일명만: "git rebase는 히스토리를 재구성합니다(git-rebase.md)."
+
+⚠️ 규칙:
+- 실제 파일명을 사용하세요 (예: "근거 1", "문서 1" 같은 번호 사용 금지)
+- 모든 문장마다 인용하지 마세요!
+- 자연스러움이 우선입니다.
 
 ## 문서를 찾지 못했을 때
 
@@ -76,7 +89,7 @@ greet('Alice', 'Bob', age=25, city='Seoul')
 
 함께 사용할 때는 순서가 중요해요: 일반 인자 → *args → 키워드 인자 → **kwargs
 
-📚 참고: Python Function Arguments
+📚 참고: function-arguments.md
 ```
 
 ### 예시 2: 실용적 가이드
@@ -131,7 +144,7 @@ shallow[0][0] = 99  # original도 변경됨!
 deep = copy.deepcopy(original)
 deep[0][0] = 99  # original은 그대로
 
-📚 참고: Python Copy Module
+📚 참고: copy-module.md, shallow-vs-deep.md
 ```
 
 ---
