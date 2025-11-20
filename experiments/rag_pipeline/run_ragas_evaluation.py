@@ -175,13 +175,35 @@ def run_ragas_evaluation(dataset: Dataset) -> Dict:
     logger.info(f"\n✓ RAGAS evaluation completed in {eval_time:.2f}s ({eval_time/60:.1f} min)")
 
     # Convert EvaluationResult to dict for JSON serialization
-    ragas_scores = {
-        'context_precision': float(evaluation_result['context_precision']),
-        'context_recall': float(evaluation_result['context_recall']),
-        'faithfulness': float(evaluation_result['faithfulness']),
-        'answer_relevancy': float(evaluation_result['answer_relevancy']),
-        'answer_correctness': float(evaluation_result['answer_correctness']),
-    }
+    # RAGAS returns lists of scores per question, need to compute mean
+    try:
+        # Try to convert to pandas and get mean (handles NaN automatically)
+        result_df = evaluation_result.to_pandas()
+        ragas_scores = {
+            'context_precision': float(result_df['context_precision'].mean()),
+            'context_recall': float(result_df['context_recall'].mean()),
+            'faithfulness': float(result_df['faithfulness'].mean()),
+            'answer_relevancy': float(result_df['answer_relevancy'].mean()),
+            'answer_correctness': float(result_df['answer_correctness'].mean()),
+        }
+    except AttributeError:
+        # If to_pandas() doesn't exist, manually compute mean with NaN handling
+        ragas_scores = {}
+        for metric_name in ['context_precision', 'context_recall', 'faithfulness',
+                            'answer_relevancy', 'answer_correctness']:
+            values = evaluation_result[metric_name]
+            # Filter out NaN values
+            clean_values = [v for v in values if not (isinstance(v, float) and np.isnan(v))]
+            if clean_values:
+                ragas_scores[metric_name] = float(np.mean(clean_values))
+            else:
+                ragas_scores[metric_name] = 0.0
+                logger.warning(f"{metric_name} has no valid values, defaulting to 0.0")
+
+    # Log scores
+    logger.info("\nRAGAS Scores:")
+    for metric, score in ragas_scores.items():
+        logger.info(f"  {metric}: {score:.4f} ({score*100:.2f}%)")
 
     return ragas_scores
 
