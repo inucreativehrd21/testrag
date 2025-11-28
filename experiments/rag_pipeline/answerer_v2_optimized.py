@@ -370,9 +370,9 @@ class EnhancedRAGPipeline:
             logger.warning("No contexts retrieved")
             return "관련 문서를 찾지 못했습니다. 질문을 다르게 표현해보시겠어요?"
 
-        # Format context with metadata
+        # Format context with metadata (including URL for reference)
         context_block = "\n\n".join(
-            f"[문서 {i+1}] {meta.get('domain', 'unknown')} | chunk {meta.get('chunk_id', 'unknown')[-8:]}\n{ctx}"
+            f"[문서 {i+1}] {meta.get('domain', 'unknown')}\n{ctx}"
             for i, (ctx, meta) in enumerate(zip(contexts, metadatas))
         )
         logger.debug(f"Formatted {len(contexts)} contexts with metadata for LLM")
@@ -391,8 +391,21 @@ class EnhancedRAGPipeline:
             max_tokens=self.llm_cfg.get("max_new_tokens", 300),
             top_p=self.llm_cfg.get("top_p", 0.9)
         )
-        answer = response.choices[0].message.content
+        answer_text = response.choices[0].message.content
         llm_time = time.time() - llm_start
+
+        # Add source URLs at the end
+        source_urls = []
+        for meta in metadatas:
+            url = meta.get('url', 'unknown')
+            if url != 'unknown' and url not in source_urls:
+                source_urls.append(url)
+
+        if source_urls:
+            sources_section = "\n\n📚 참고:\n" + "\n".join(f"- {url}" for url in source_urls)
+            answer = answer_text + sources_section
+        else:
+            answer = answer_text
 
         total_time = time.time() - total_start
         logger.info(f"Answer generated in {llm_time:.2f}s, total: {total_time:.2f}s")
@@ -421,9 +434,9 @@ class EnhancedRAGPipeline:
             logger.warning("No contexts retrieved")
             return "관련 문서를 찾지 못했습니다. 질문을 다르게 표현해보시겠어요?", []
 
-        # Format context with metadata
+        # Format context with metadata (including URL for reference)
         context_block = "\n\n".join(
-            f"[문서 {i+1}] {meta.get('domain', 'unknown')} | chunk {meta.get('chunk_id', 'unknown')[-8:]}\n{ctx}"
+            f"[문서 {i+1}] {meta.get('domain', 'unknown')}\n{ctx}"
             for i, (ctx, meta) in enumerate(zip(contexts, metadatas))
         )
         logger.debug(f"Formatted {len(contexts)} contexts with metadata for LLM")
@@ -442,8 +455,21 @@ class EnhancedRAGPipeline:
             max_tokens=self.llm_cfg.get("max_new_tokens", 300),
             top_p=self.llm_cfg.get("top_p", 0.9)
         )
-        answer = response.choices[0].message.content
+        answer_text = response.choices[0].message.content
         llm_time = time.time() - llm_start
+
+        # Add source URLs at the end
+        source_urls = []
+        for meta in metadatas:
+            url = meta.get('url', 'unknown')
+            if url != 'unknown' and url not in source_urls:
+                source_urls.append(url)
+
+        if source_urls:
+            sources_section = "\n\n📚 참고:\n" + "\n".join(f"- {url}" for url in source_urls)
+            answer = answer_text + sources_section
+        else:
+            answer = answer_text
 
         total_time = time.time() - total_start
         logger.info(f"Answer generated in {llm_time:.2f}s, total: {total_time:.2f}s")

@@ -42,33 +42,46 @@ class DataPreparer:
             logger.info(f"Fallback chunker: size={fallback_cfg['chunk_size']}, overlap={fallback_cfg['chunk_overlap']}")
 
     def run(self):
-        logger.info("Starting data preparation pipeline")
+        logger.info("Starting data preparation pipeline (with URL metadata)")
         start_time = time.time()
 
-        documents = self._load_documents()
-        logger.info(f"Loaded {len(documents)} domain documents")
+        # Load documents with URL metadata
+        documents_with_metadata = self._load_documents_with_metadata()
+        logger.info(f"Loaded {len(documents_with_metadata)} domain documents (with URLs)")
 
         chunk_rows = []
-        for domain, text in documents.items():
+        for domain_data in documents_with_metadata:
+            domain = domain_data["domain"]
+            doc_chunks = domain_data["chunks"]  # List of {text, url}
+
             domain_start = time.time()
-            chunks = self.chunker.split_text(text)
-            used_fallback = False
-            if not chunks and self.fallback_chunker is not None:
-                chunks = self.fallback_chunker.split_text(text)
-                used_fallback = True
-            for idx, chunk in enumerate(chunks):
-                chunk_rows.append(
-                    {
-                        "domain": domain,
-                        "chunk_id": f"{domain}_{idx}",
-                        "text": chunk,
-                        "length": len(chunk),
-                    }
-                )
+
+            for chunk_info in doc_chunks:
+                chunk_text = chunk_info["text"]
+                chunk_url = chunk_info["url"]
+
+                # Split chunk if needed
+                chunks = self.chunker.split_text(chunk_text)
+                used_fallback = False
+                if not chunks and self.fallback_chunker is not None:
+                    chunks = self.fallback_chunker.split_text(chunk_text)
+                    used_fallback = True
+
+                # Add all sub-chunks with URL
+                for idx, chunk in enumerate(chunks):
+                    chunk_rows.append(
+                        {
+                            "domain": domain,
+                            "chunk_id": f"{domain}_{len(chunk_rows)}",
+                            "text": chunk,
+                            "length": len(chunk),
+                            "url": chunk_url  # ← URL 추가!
+                        }
+                    )
+
             domain_time = time.time() - domain_start
             logger.info(
-                f"Domain '{domain}': {len(chunks)} chunks created in {domain_time:.2f}s "
-                f"(fallback={'yes' if used_fallback else 'no'})"
+                f"Domain '{domain}': {len([r for r in chunk_rows if r['domain'] == domain])} chunks created in {domain_time:.2f}s (with URLs)"
             )
 
         df = pd.DataFrame(chunk_rows)
@@ -79,6 +92,94 @@ class DataPreparer:
         logger.info(f"Data preparation complete: {len(df)} total chunks saved to {output_path}")
         logger.info(f"Total time: {elapsed:.2f}s")
         print(f"Saved {len(df)} chunks to {output_path}")
+
+    def _load_documents_with_metadata(self) -> List[Dict]:
+        """
+        Load documents with URL metadata
+
+        Returns:
+            [
+                {
+                    "domain": "python",
+                    "chunks": [
+                        {"text": "...", "url": "https://..."},
+                        {"text": "...", "url": "https://..."},
+                    ]
+                },
+                ...
+            ]
+        """
+        logger.info(f"Loading documents with URL metadata from {self.raw_dir}")
+
+        if not self.raw_dir.exists():
+            logger.error(f"Raw data directory not found: {self.raw_dir}")
+            raise FileNotFoundError(f"Raw data directory not found: {self.raw_dir}")
+
+        target_domains = self.domains if self.domains else [
+            d.name for d in self.raw_dir.iterdir() if d.is_dir()
+        ]
+
+        all_domain_data = []
+
+        for domain in target_domains:
+            domain_dir = self.raw_dir / domain
+            if not domain_dir.exists():
+                logger.warning(f"Domain directory not found: {domain_dir}")
+                continue
+
+            # pages.json 파일 찾기
+            pages_file = domain_dir / "pages.json"
+            if not pages_file.exists():
+                logger.warning(f"pages.json not found in {domain_dir}")
+                continue
+
+            try:
+                with open(pages_file, "r", encoding="utf-8") as f:
+                    pages_data = json.load(f)
+
+                chunks = []
+                for page in pages_data:
+                    url = page.get("url", "unknown")
+
+                    # Extract all text from sections
+                    page_texts = []
+
+                    # Add title
+                    if "title" in page:
+                        page_texts.append(page["title"])
+
+                    # Add summary
+                    if "summary" in page:
+                        page_texts.append(page["summary"])
+
+                    # Add sections
+                    if "sections" in page:
+                        for section in page["sections"]:
+                            if section.get("header"):
+                                page_texts.append(section["header"])
+                            if section.get("content"):
+                                page_texts.append(section["content"])
+
+                    # Combine and add to chunks
+                    if page_texts:
+                        combined_text = "\n\n".join(page_texts)
+                        chunks.append({
+                            "text": combined_text,
+                            "url": url
+                        })
+
+                all_domain_data.append({
+                    "domain": domain,
+                    "chunks": chunks
+                })
+
+                logger.info(f"Domain '{domain}': loaded {len(chunks)} documents with URLs")
+
+            except Exception as e:
+                logger.error(f"Failed to load {pages_file}: {e}")
+                continue
+
+        return all_domain_data
 
     def _load_documents(self) -> Dict[str, str]:
         logger.info(f"Loading documents from {self.raw_dir}")

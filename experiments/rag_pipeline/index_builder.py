@@ -86,7 +86,11 @@ class IndexBuilder:
             )["dense_vecs"]
 
             ids = batch["chunk_id"].tolist()
-            metadatas = batch[["domain", "length"]].to_dict(orient="records")
+            # Include URL in metadata
+            metadata_columns = ["domain", "length"]
+            if "url" in batch.columns:
+                metadata_columns.append("url")
+            metadatas = batch[metadata_columns].to_dict(orient="records")
             collection.add(
                 ids=ids,
                 embeddings=embeddings,
