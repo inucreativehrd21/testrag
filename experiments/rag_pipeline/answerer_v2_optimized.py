@@ -172,6 +172,17 @@ class EnhancedRAGPipeline:
         logger.debug(f"RRF fusion: combined {len(dense_results)} dense + {len(sparse_results)} sparse → {len(fused_docs)} unique docs")
         return fused_docs
 
+    @staticmethod
+    def _strip_existing_sources(answer_text: str) -> str:
+        """
+        Remove any existing '📚 참고' section that the LLM may have added.
+        This prevents duplicate or outdated source lists when we append URLs.
+        """
+        marker = "📚 참고"
+        if marker in answer_text:
+            return answer_text.split(marker)[0].rstrip()
+        return answer_text
+
     def _rerank(self, query: str, documents: List[str], reranker: FlagReranker, top_k: int) -> List[str]:
         """Rerank documents using FlagReranker"""
         if not documents:
@@ -392,6 +403,8 @@ class EnhancedRAGPipeline:
             top_p=self.llm_cfg.get("top_p", 0.9)
         )
         answer_text = response.choices[0].message.content
+        # Remove any pre-existing "📚 참고" section before appending URLs
+        answer_text = self._strip_existing_sources(answer_text)
         llm_time = time.time() - llm_start
 
         # Add source URLs at the end
@@ -456,6 +469,8 @@ class EnhancedRAGPipeline:
             top_p=self.llm_cfg.get("top_p", 0.9)
         )
         answer_text = response.choices[0].message.content
+        # Remove any pre-existing "📚 참고" section before appending URLs
+        answer_text = self._strip_existing_sources(answer_text)
         llm_time = time.time() - llm_start
 
         # Add source URLs at the end
