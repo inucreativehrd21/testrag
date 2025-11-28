@@ -1,0 +1,74 @@
+# PyTorch with CUDA 12.4 (현재 작동 확인된 버전)
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+torchaudio==2.6.0+cu124
+
+# Core ML/NLP Libraries
+transformers==4.40.2
+sentence-transformers==2.7.0
+tokenizers==0.19.1
+accelerate==1.11.0
+peft==0.10.0
+safetensors==0.6.2
+
+# Embedding & Reranking
+FlagEmbedding==1.2.11
+
+# Vector Database
+chromadb==0.4.24
+
+# LangChain Stack
+langchain==0.1.20
+langchain-core==0.1.53
+langchain-community==0.0.38
+langchain-text-splitters==0.0.1
+langchain-openai==0.1.7
+
+# RAG Evaluation
+ragas==0.3.2
+datasets==2.19.1
+
+# LLM APIs
+openai==1.109.1
+anthropic==0.40.0
+
+# Data Processing
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.15.3
+scikit-learn==1.7.2
+pyarrow==16.1.0
+
+# Web Scraping
+beautifulsoup4
+lxml
+requests==2.31.0
+
+# Configuration & Utils
+PyYAML==6.0.1
+python-dotenv==1.0.0
+pydantic==2.5.3
+pydantic-core==2.14.6
+typing-extensions==4.15.0
+
+# Visualization
+matplotlib==3.10.7
+seaborn==0.13.2
+
+# Progress & Logging
+tqdm==4.67.1
+coloredlogs==15.0.1
+rich==13.9.4
+
+# HuggingFace
+huggingface-hub==0.22.2
+
+# FastAPI (if needed)
+fastapi==0.109.0
+uvicorn==0.27.0
+
+# Other utilities
+nest-asyncio==1.6.0
+tiktoken==0.12.0
+instructor==1.0.0

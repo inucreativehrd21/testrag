@@ -240,7 +240,7 @@ def save_results(
 
     # Generate text report
     report_file = output_path / f"ragas_eval_{timestamp}_report.txt"
-    with open(report_file, "w", encoding="utf-8") as f:
+    with open(report_file, "w", encoding="utf-8-sig") as f:
         f.write("="*80 + "\n")
         f.write("RAGAS EVALUATION REPORT\n")
         f.write("="*80 + "\n\n")
