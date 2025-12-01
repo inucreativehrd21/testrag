@@ -97,10 +97,10 @@ embedding:
 
 llm:
   provider: "openai"
-  model_name: "gpt-4o"
+  model_name: "gpt-4.1"
   api_key_env: "OPENAI_API_KEY"
   api_base: null
-  max_new_tokens: 256
+  max_new_tokens: 300
   temperature: 0.2
   top_p: 0.9
   max_context_docs: 3

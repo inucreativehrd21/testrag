@@ -58,8 +58,8 @@ class RagasBenchmark:
 
     def __init__(
         self,
-        config_path: str = "config/base.yaml",
-        questions_path: str = "ragas_questions.json",
+        config_path: str = "config/enhanced.yaml",
+        questions_path: str = "ragas_evaluation_questions.json",
         output_dir: str = "artifacts/ragas_evals"
     ):
         """

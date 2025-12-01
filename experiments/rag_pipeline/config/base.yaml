@@ -16,7 +16,7 @@ chunking:
 
 embedding:
   model_name: BAAI/bge-m3
-  device: cuda  # Changed from auto to cpu for Windows compatibility
+  device: cpu  # Changed from auto to cpu for Windows compatibility
   batch_size: 32
   max_length: 1024
 
@@ -26,10 +26,10 @@ retrieval:
   rerankers:
     stage1:
       model_name: BAAI/bge-reranker-v2-m3
-      device: cuda  # Changed from cuda:0 to cpu
+      device: cpu  # Changed from cuda:0 to cpu
     stage2:
       model_name: BAAI/bge-reranker-large
-      device: cuda  # Changed from cuda:1 to cpu
+      device: cpu  # Changed from cuda:1 to cpu
 
 llm:
   provider: openai
