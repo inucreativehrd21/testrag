@@ -92,12 +92,14 @@ def check_hallucination_and_usefulness(
         logger.info("[Decision] 환각 없음 → answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        if retry_count < config.max_retries:
-            logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
-            state["retry_count"] += 1
-            return "websearch"
-        logger.warning("[Decision] 최대 재시도 초과 → answer_grading")
-        return "answer_grading"
+        # 안전 가드: 최대 재시도 초과 시 루프 중단
+        if retry_count >= config.max_retries:
+            logger.warning("[Decision] 최대 재시도 초과 → 추가 검색 없이 종료 경로")
+            return "answer_grading"
+
+        logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
+        state["retry_count"] += 1
+        return "websearch"
     else:
         logger.info("[Decision] 환각 불확실 → answer_grading")
         return "answer_grading"
