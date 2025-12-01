@@ -5,7 +5,7 @@ Git 명령어와 Python 함수의 설명, 사용법, 예제를 정확하게 추�
 from bs4 import BeautifulSoup, Comment
 from typing import Dict, List, Optional
 import re
-from config.settings import CONTENT_CONFIG
+from config.settings_extended import CONTENT_CONFIG
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

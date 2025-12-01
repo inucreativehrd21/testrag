@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from collections import defaultdict
 from datetime import datetime, timedelta
-from config.settings import CRAWL_CONFIG
+from config.settings_extended import CRAWL_CONFIG
 from utils.logger import get_logger
 from utils.retry_handler import retry_on_error, get_circuit_breaker
 
