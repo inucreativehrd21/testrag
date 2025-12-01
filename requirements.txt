@@ -55,8 +55,8 @@ requests==2.31.0
 # Configuration & Utils
 PyYAML==6.0.1
 python-dotenv==1.0.0
-pydantic==2.5.3
-pydantic-core==2.14.6
+pydantic==2.10.3
+pydantic-core==2.27.1
 typing-extensions==4.15.0
 
 # Visualization
