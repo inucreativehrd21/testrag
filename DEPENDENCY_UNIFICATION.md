@@ -33,6 +33,8 @@ langchain-core==0.1.53 → langchain-core==0.3.15
 langchain-community==0.0.38 → langchain-community==0.3.5
 langchain-text-splitters==0.0.1 → langchain-text-splitters==0.3.2
 langchain-openai==0.1.7 → langchain-openai==0.2.9
+pydantic==2.5.3 → pydantic==2.10.3  # langchain 0.3.7 호환 (>=2.7.4 필요)
+pydantic-core==2.14.6 → pydantic-core==2.27.1
 ```
 
 ### 추가된 패키지 (LangGraph RAG용)
