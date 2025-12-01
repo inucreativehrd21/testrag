@@ -19,6 +19,7 @@ LangGraph RAG 노드 함수
 
 import asyncio
 import logging
+import re
 import time
 from typing import Dict, List, Tuple
 
@@ -115,6 +116,75 @@ class RAGResources:
 def get_resources() -> RAGResources:
     """전역 RAG 리소스 반환"""
     return RAGResources()
+
+# ========== 노드 0: Intent Classifier ==========
+
+
+def intent_classifier_node(state: RAGState) -> RAGState:
+    """
+    질문 의도를 분류해 in_scope가 아니면 초기에 종료시킨다.
+
+    Categories:
+    - IN_SCOPE: 개발/프로그래밍/학습 관련
+    - GREETING: 인사/감사 등
+    - CHITCHAT: 잡담/요청(아이스크림 사줘 등)
+    - NONSENSICAL: 무의미/스팸
+    """
+    logger.info("[Intent] 질문 의도 분류 시작")
+    resources = get_resources()
+    config = get_config()
+
+    question = state["question"]
+    intent = "unknown"
+
+    prompt = f"""다음 사용자의 질문이 개발/프로그래밍/학습 관련인지 분류하세요.
+반드시 아래 중 하나의 라벨만 답변:
+- IN_SCOPE: 개발, 프로그래밍, 소프트웨어 학습/디버깅/도구 사용
+- GREETING: 인사, 감사, 안부
+- CHITCHAT: 잡담/사적요청 (예: 아이스크림 사줘, 노래 추천)
+- NONSENSICAL: 무의미/스팸/의미 없는 입력
+
+질문: {question}
+
+정답 라벨 한 단어만:"""
+
+    try:
+        response = resources.llm_client.chat.completions.create(
+            model=config.context_quality_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=4,
+        )
+        label = response.choices[0].message.content.strip().upper()
+        if "IN_SCOPE" in label:
+            intent = "in_scope"
+        elif "GREETING" in label:
+            intent = "greeting"
+        elif "CHITCHAT" in label:
+            intent = "chitchat"
+        elif "NON" in label:
+            intent = "nonsensical"
+        else:
+            intent = "unknown"
+    except Exception as e:
+        logger.warning(f"[Intent] 분류 실패: {e}, 기본 in_scope로 처리")
+        intent = "in_scope"
+
+    state["intent"] = intent
+
+    # in_scope가 아니면 바로 짧은 메시지 후 종료
+    if intent != "in_scope":
+        reply_map = {
+            "greeting": "안녕하세요! 저는 개발·학습 도우미예요. 궁금한 개발/프로그래밍 질문을 알려주시면 도와드릴게요.",
+            "chitchat": "저는 개발·학습 관련 질문에 집중하고 있어요. 코드나 에러, 학습 주제를 말씀해 주세요!",
+            "nonsensical": "지금 입력으로는 도움을 드리기 어려워요. 개발/프로그래밍 관련 질문을 구체적으로 알려주시면 도와드릴게요.",
+        }
+        state["generation"] = reply_map.get(
+            intent,
+            "개발·학습 관련 질문을 알려주시면 도움을 드릴게요.",
+        )
+
+    return add_to_history(state, "intent_classifier")
 
 
 # ========== 노드 1: Query Router ==========
@@ -659,7 +729,7 @@ def generate_node(state):
         {"role": "system", "content": resources.system_prompt},
         {
             "role": "user",
-            "content": f"질문: {question}\n\n컨텍스트:\n{context_block}",
+            "content": f"질문: {question}\n\n컨텍스트:\n{context_block}\n\n규칙: 본문에 툴/출처명(tavily, websearch 등)을 넣지 말고, 출처는 마지막 '📚 참고' 섹션에만 표기하세요.",
         },
     ]
 
@@ -673,8 +743,8 @@ def generate_node(state):
         )
         answer_text = response.choices[0].message.content
 
-        # 기존 출처 제거 (중복 방지)
-        answer_text = _strip_existing_sources(answer_text)
+        # 기존 출처 제거 및 툴명 정리
+        answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
 
         # URL 출처 추가
         source_urls = []
@@ -704,12 +774,24 @@ def generate_node(state):
     return add_to_history(state, "generate")
 
 
-def _strip_existing_sources(answer_text):
+def _strip_existing_sources(answer_text: str) -> str:
     """기존 출처 섹션 제거"""
     marker = "📚 참고"
     if marker in answer_text:
         return answer_text.split(marker)[0].rstrip()
     return answer_text
+
+
+def _clean_tool_mentions(answer_text: str) -> str:
+    """
+    본문에서 tavily/websearch 등 툴 이름을 제거해 답변을 자연스럽게 만든다.
+    """
+    cleaned = answer_text
+    for token in ["tavily", "websearch", "web search", "Tavily", "WebSearch"]:
+        cleaned = re.sub(rf"\(?\b{re.escape(token)}\b\)?", "", cleaned, flags=re.IGNORECASE)
+    # Collapse double spaces left by removals
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip()
 
 
 # ========== 노드 8: Hallucination Check ==========
@@ -731,7 +813,7 @@ def hallucination_check_node(state):
         return add_to_history(state, "hallucination_check")
 
     # 출처 제거한 답변만 검증
-    answer_only = _strip_existing_sources(generation)
+    answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
     # 컨텍스트 요약 (너무 길면 truncate)
     context_preview = "\n\n".join(documents[:3])
@@ -798,7 +880,7 @@ def answer_grading_node(state):
     generation = state["generation"]
 
     # 출처 제거한 답변만 평가
-    answer_only = _strip_existing_sources(generation)
+    answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
     prompt = f"""다음 답변이 질문에 유용한지 판단하세요.
 
