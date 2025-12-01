@@ -34,12 +34,18 @@ class RAGConfig:
             config_path (str, optional): 설정 파일 경로.
                                          None이면 기본 enhanced.yaml 사용
         """
+        # Base project dir (experiments/rag_pipeline)
+        self.base_dir = Path(__file__).resolve().parent.parent
+
         if config_path is None:
             # 기본 경로: experiments/rag_pipeline/config/enhanced.yaml
-            base_dir = Path(__file__).parent.parent
-            config_path = base_dir / "config" / "enhanced.yaml"
+            resolved_config = self.base_dir / "config" / "enhanced.yaml"
+        else:
+            candidate = Path(config_path)
+            # Relative paths are resolved from the project base dir to avoid CWD differences
+            resolved_config = candidate if candidate.is_absolute() else (self.base_dir / candidate)
 
-        self.config_path = Path(config_path)
+        self.config_path = resolved_config.resolve()
         self.config = self._load_config()
 
         # LangGraph 특화 설정
@@ -77,8 +83,7 @@ class RAGConfig:
     @property
     def artifacts_dir(self) -> Path:
         """artifacts 디렉토리 경로"""
-        base_dir = Path(__file__).parent.parent
-        return base_dir / self.config["project"]["artifacts_dir"]
+        return self.base_dir / self.config["project"]["artifacts_dir"]
 
     @property
     def chroma_db_path(self) -> Path:

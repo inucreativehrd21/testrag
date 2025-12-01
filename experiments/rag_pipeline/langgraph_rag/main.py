@@ -15,6 +15,11 @@ import os
 import sys
 from pathlib import Path
 
+# Allow running as a script (python main.py) by adjusting import context
+if __package__ in (None, ""):
+    sys.path.append(str(Path(__file__).resolve().parent.parent))
+    __package__ = "langgraph_rag"
+
 # LangSmith 추적 설정 (선택사항)
 def setup_langsmith():
     """
