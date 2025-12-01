@@ -119,13 +119,7 @@ test/
 ### 1. 의존성 설치
 
 ```bash
-# 메인 의존성
-pip install -r requirements.txt
-
-# LangGraph RAG 의존성
-cd experiments/rag_pipeline/langgraph_rag
-pip install -r requirements.txt
-```
+**통합 requirements.txt 사용 (LangGraph 포함)**```bash# 프로젝트 루트에서 한 번에 모든 의존성 설치pip install -r requirements.txt# 포함된 주요 패키지:# - Optimized RAG: FlagEmbedding, chromadb, transformers# - LangGraph RAG: langgraph, langsmith, tavily-python# - 공통: langchain (0.3.7), chromadb (0.5.5), openai```
 
 ### 2. 환경변수 설정
 

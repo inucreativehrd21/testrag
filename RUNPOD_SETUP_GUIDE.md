@@ -94,30 +94,22 @@ source ~/.bashrc
 
 ## 3. 의존성 설치
 
-### 3-1. 메인 의존성 설치
+### 3-1. 통합 의존성 설치 (Optimized RAG + LangGraph RAG)
+
+**중요:** 프로젝트 루트의 `requirements.txt`에 모든 의존성이 통합되었습니다.
 
 ```bash
 cd /workspace/testrag
 
-# 메인 의존성
+# 한 번에 모든 의존성 설치 (Optimized RAG + LangGraph RAG)
 pip install -r requirements.txt
 
-# 예상 시간: 5-10분
-```
+# 예상 시간: 10-15분
 
-### 3-2. LangGraph RAG 의존성 설치 (선택)
-
-LangGraph RAG를 사용하려면:
-
-```bash
-cd experiments/rag_pipeline/langgraph_rag
-pip install -r requirements.txt
-
-# 주요 패키지:
-# - langgraph>=0.2.0
-# - langchain>=0.3.0
-# - langsmith>=0.1.0
-# - tavily-python>=0.3.0
+# 포함된 주요 패키지:
+# - Optimized RAG: FlagEmbedding, transformers, sentence-transformers
+# - LangGraph RAG: langgraph (0.2.45), langsmith (0.1.147), tavily-python (0.5.0)
+# - 공통: langchain (0.3.7), chromadb (0.5.5), openai (1.109.1)
 ```
 
 ### 3-3. GPU 확인

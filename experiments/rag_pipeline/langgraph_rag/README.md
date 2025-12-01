@@ -95,9 +95,18 @@ answer_grading (답변 품질 평가)
 
 ### 1. 의존성 설치
 
+**중요:** LangGraph RAG는 프로젝트 루트의 통합 `requirements.txt`를 사용합니다.
+
 ```bash
-cd experiments/rag_pipeline/langgraph_rag
+# 프로젝트 루트에서 실행
+cd /path/to/project/root
 pip install -r requirements.txt
+
+# LangGraph 및 LangSmith 의존성이 포함되어 있습니다:
+# - langgraph==0.2.45
+# - langsmith==0.1.147
+# - tavily-python==0.5.0
+# - 업그레이드된 langchain==0.3.7 및 chromadb==0.5.5
 ```
 
 ### 2. 환경변수 설정
