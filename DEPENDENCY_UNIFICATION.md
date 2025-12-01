@@ -29,7 +29,7 @@
 # Before → After
 chromadb==0.4.24 → chromadb==0.5.5
 langchain==0.1.20 → langchain==0.3.7
-langchain-core==0.1.53 → langchain-core==0.3.15
+langchain-core==0.1.53 → langchain-core==0.3.21
 langchain-community==0.0.38 → langchain-community==0.3.5
 langchain-text-splitters==0.0.1 → langchain-text-splitters==0.3.2
 langchain-openai==0.1.7 → langchain-openai==0.2.9
