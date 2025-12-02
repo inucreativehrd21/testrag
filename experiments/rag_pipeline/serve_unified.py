@@ -123,11 +123,16 @@ def load_optimized_rag(config_path: str):
 def load_langgraph_rag(config_path: str):
     """Load LangGraph RAG system"""
     from langgraph_rag.graph import create_rag_graph
+    from langgraph_rag.config import get_config
 
     logger.info(f"Loading LangGraph RAG with config: {config_path}")
     start_time = time.time()
 
-    graph = create_rag_graph(config_path)
+    # Initialize config first
+    _ = get_config(config_path)
+
+    # Create graph
+    graph = create_rag_graph()
 
     load_time = time.time() - start_time
     logger.info(f"LangGraph RAG loaded in {load_time:.2f}s")
@@ -246,32 +251,37 @@ def process_langgraph_rag(
 
         logger.info(f"[LangGraph RAG] Processing: {question[:50]}...")
 
+        # Create initial state
+        from langgraph_rag.state import create_initial_state
+        initial_state = create_initial_state(question)
+
         # Run LangGraph
-        result = rag_instance.invoke({
-            "question": question,
-            "chat_history": [{"role": m.role, "content": m.content} for m in chat_history[-5:]],
-            "documents": [],
-            "generation": "",
-            "retry_count": 0,
-            "document_relevance": "unknown",
-            "hallucination_grade": "unknown",
-            "answer_usefulness": "unknown",
-            "web_search_needed": False,
-            "workflow_history": []
-        })
+        result = rag_instance.invoke(initial_state)
 
         answer = result.get("generation", "답변 생성에 실패했습니다.")
-        documents = result.get("documents", [])
+
+        # Get final documents (after reranking)
+        final_documents = result.get("final_documents", [])
+        final_metadatas = result.get("final_metadatas", [])
+
+        # Fallback to regular documents if final is empty
+        if not final_documents:
+            final_documents = result.get("reranked_documents", [])
+            final_metadatas = result.get("reranked_metadatas", [])
+
+        if not final_documents:
+            final_documents = result.get("documents", [])
+            final_metadatas = result.get("metadatas", [])
 
         # Build sources
         sources = []
-        for doc in documents[:10]:  # Top 10
-            if hasattr(doc, 'metadata'):
-                url = doc.metadata.get('source') or doc.metadata.get('url')
-                content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
-            else:
-                url = None
-                content = str(doc)
+        for i, doc in enumerate(final_documents[:10]):  # Top 10
+            # Get metadata if available
+            metadata = final_metadatas[i] if i < len(final_metadatas) else {}
+            url = metadata.get('source') or metadata.get('url')
+
+            # Document content is already a string in LangGraph
+            content = doc if isinstance(doc, str) else str(doc)
 
             sources.append(Source(
                 content=content[:200] + "..." if len(content) > 200 else content,
