@@ -384,11 +384,14 @@ async def health():
 
 
 @app.post("/api/v1/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     """
     Chat with RAG system
 
     This endpoint is called by the EC2 Django backend.
+
+    Note: This is a sync function (not async) because the RAG processing
+    functions are blocking. FastAPI will automatically run this in a thread pool.
     """
     if rag_instance is None:
         raise HTTPException(
