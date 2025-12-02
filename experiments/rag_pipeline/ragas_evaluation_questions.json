@@ -23,8 +23,14 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Python에서 리스트(list)와 튜플(tuple)의 차이는 무엇인가요?",
-      "ground_truth": "리스트는 mutable(변경 가능)하여 요소를 추가, 삭제, 수정할 수 있지만, 튜플은 immutable(변경 불가)하여 한번 생성되면 수정할 수 없습니다. 리스트는 []로, 튜플은 ()로 정의합니다.",
-      "expected_topics": ["mutable", "immutable", "list", "tuple", "difference"]
+      "ground_truth": "개념: 리스트는 []로 정의하며 mutable이라 요소 추가/삭제/수정이 가능하지만 튜플은 ()로 정의하고 immutable이라 생성 후 값이 바뀌지 않는다.\n예시: nums = [1, 2]; nums.append(3) -> [1, 2, 3], coords = (10, 20); coords[0] = 5  # TypeError\n출처: Python 공식 문서 Tutorial - Data Structures",
+      "expected_topics": [
+        "mutable",
+        "immutable",
+        "list",
+        "tuple",
+        "difference"
+      ]
     },
     {
       "id": "python_002",
@@ -32,8 +38,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Python에서 *args와 **kwargs는 무엇인가요?",
-      "ground_truth": "*args는 가변 개수의 위치 인자를 튜플로 받고, **kwargs는 가변 개수의 키워드 인자를 딕셔너리로 받습니다. 함수에 유연하게 인자를 전달할 때 사용합니다.",
-      "expected_topics": ["args", "kwargs", "variable arguments", "function"]
+      "ground_truth": "개념: *args는 위치 인자를 튜플로, **kwargs는 키워드 인자를 딕셔너리로 모아 함수에 가변 길이 인자를 넘길 때 쓴다.\n예시: def log(prefix, *args, **kwargs): print(prefix, args, kwargs); log('evt', 1, 2, user='kim') -> ('evt', (1, 2), {'user': 'kim'})\n출처: Python 공식 문서 'More on Functions'",
+      "expected_topics": [
+        "args",
+        "kwargs",
+        "variable arguments",
+        "function"
+      ]
     },
     {
       "id": "python_003",
@@ -41,8 +52,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Python에서 얕은 복사(shallow copy)와 깊은 복사(deep copy)의 차이는?",
-      "ground_truth": "얕은 복사는 최상위 객체만 복사하고 내부 객체는 참조를 공유하지만, 깊은 복사는 모든 중첩 객체까지 재귀적으로 복사하여 완전히 독립적인 복사본을 만듭니다.",
-      "expected_topics": ["shallow copy", "deep copy", "copy", "reference"]
+      "ground_truth": "개념: 얕은 복사는 최상위 컨테이너만 새로 만들고 내부 객체 참조는 공유하지만 깊은 복사는 중첩 객체까지 재귀적으로 새로 만든다.\n예시: import copy; a = [[1], [2]]; b = copy.copy(a); b[0].append(9) -> a도 [[1, 9], [2]]; c = copy.deepcopy(a); c[0].append(5) 해도 a는 그대로다.\n출처: Python copy 모듈 문서",
+      "expected_topics": [
+        "shallow copy",
+        "deep copy",
+        "copy",
+        "reference"
+      ]
     },
     {
       "id": "python_004",
@@ -50,8 +66,12 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Python에서 리스트 컴프리헨션(list comprehension)은 어떻게 사용하나요?",
-      "ground_truth": "[expression for item in iterable if condition] 형태로 사용합니다. 예: [x*2 for x in range(10) if x % 2 == 0]는 0-9 중 짝수를 2배한 리스트를 생성합니다.",
-      "expected_topics": ["list comprehension", "syntax", "example"]
+      "ground_truth": "개념: 리스트 컴프리헨션은 [표현식 for 항목 in 이터러블 if 조건] 형태로 새 리스트를 만드는 문법이다.\n예시: [x*2 for x in range(5) if x % 2 == 0] -> [0, 4, 8]\n출처: Python 튜토리얼 'Lists' 섹션",
+      "expected_topics": [
+        "list comprehension",
+        "syntax",
+        "example"
+      ]
     },
     {
       "id": "python_005",
@@ -59,8 +79,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Python에서 딕셔너리의 값을 안전하게 가져오는 방법은?",
-      "ground_truth": "dict.get(key, default) 메서드를 사용합니다. 키가 없으면 KeyError 대신 기본값을 반환합니다. 예: my_dict.get('name', 'Unknown')",
-      "expected_topics": ["dictionary", "get", "default value", "KeyError"]
+      "ground_truth": "개념: dict.get(key, default)로 키가 없을 때 기본값을 반환해 KeyError를 피할 수 있고, 필요하면 setdefault로 기본값을 넣으며 조회할 수 있다.\n예시: user_age = profile.get('age', 0); counts.setdefault('apple', 0)\n출처: Python dict 객체 문서",
+      "expected_topics": [
+        "dictionary",
+        "get",
+        "default value",
+        "KeyError"
+      ]
     },
     {
       "id": "python_006",
@@ -68,8 +93,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Python에서 문자열 포맷팅 방법에는 어떤 것들이 있나요?",
-      "ground_truth": "% 포맷팅, str.format(), f-string(Python 3.6+) 세 가지가 있습니다. 현재는 f-string이 가장 권장됩니다. 예: f'{name}님 안녕하세요'",
-      "expected_topics": ["string formatting", "f-string", "format", "percent"]
+      "ground_truth": "개념: 문자열 포맷팅은 %, str.format(), f-string 세 가지가 있으며 가독성과 성능 때문에 Python 3.6+에서는 f-string이 권장된다.\n예시: name = '민수'; score = 91.25; f\"{name}님 점수는 {score:.1f}점입니다\"\n출처: Python 공식 문서 'printf-style String Formatting' 및 PEP498",
+      "expected_topics": [
+        "string formatting",
+        "f-string",
+        "format",
+        "percent"
+      ]
     },
     {
       "id": "python_007",
@@ -77,8 +107,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Python에서 파일을 읽고 쓰는 기본 방법은?",
-      "ground_truth": "with open('file.txt', 'r') as f: content = f.read() 형태로 읽고, 'w' 모드로 쓰기를 합니다. with 문을 사용하면 자동으로 파일이 닫힙니다.",
-      "expected_topics": ["file io", "open", "with statement", "read", "write"]
+      "ground_truth": "개념: 파일 입출력은 with open(path, mode, encoding) 컨텍스트 매니저로 열어 read()/write()를 호출하고 블록을 벗어나며 자동으로 닫는다.\n예시: with open('data.txt', 'w', encoding='utf-8') as f: f.write('hello'); with open('data.txt') as f: text = f.read()\n출처: Python 튜토리얼 'Input and Output'",
+      "expected_topics": [
+        "file io",
+        "open",
+        "with statement",
+        "read",
+        "write"
+      ]
     },
     {
       "id": "python_008",
@@ -86,8 +122,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Python에서 None은 무엇인가요?",
-      "ground_truth": "None은 Python의 null 값으로, 값이 없음을 나타내는 특수한 상수입니다. NoneType의 유일한 인스턴스이며, 함수가 명시적으로 값을 반환하지 않으면 None을 반환합니다.",
-      "expected_topics": ["None", "null", "NoneType", "default return"]
+      "ground_truth": "개념: None은 값이 없음을 나타내는 단일톤 객체로 불리언 컨텍스트에서 False로 평가되며 동일성 비교는 is/ is not으로 한다.\n예시: def find(): return None; result = find(); if result is None: handle_missing()\n출처: Python 공식 문서 'Built-in Constants'",
+      "expected_topics": [
+        "None",
+        "null",
+        "NoneType",
+        "default return"
+      ]
     },
     {
       "id": "python_009",
@@ -95,8 +136,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Python에서 리스트의 마지막 요소를 제거하는 방법은?",
-      "ground_truth": "list.pop() 또는 del list[-1]을 사용합니다. pop()은 제거된 요소를 반환하고, del은 반환하지 않습니다.",
-      "expected_topics": ["list", "pop", "del", "remove element"]
+      "ground_truth": "개념: 리스트의 마지막 요소는 list.pop()이나 list.pop(-1)로 제거하면서 반환할 수 있고 리스트가 비어 있으면 IndexError가 난다.\n예시: nums = [1, 2, 3]; last = nums.pop()  # last=3, nums=[1, 2]\n출처: Python list 메서드 문서",
+      "expected_topics": [
+        "list",
+        "pop",
+        "del",
+        "remove element"
+      ]
     },
     {
       "id": "python_010",
@@ -104,8 +150,14 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Python에서 == 와 is의 차이는?",
-      "ground_truth": "==는 값의 동등성을 비교하고, is는 객체의 identity(메모리 주소)를 비교합니다. is는 주로 None과 비교할 때 사용합니다.",
-      "expected_topics": ["equality", "identity", "is", "==", "comparison"]
+      "ground_truth": "개념: ==는 값 동등성(내용), is는 객체 동일성(메모리)을 비교하며 None 비교나 싱글톤 확인에 is를 쓴다.\n예시: a = [1]; b = [1]; a == b는 True지만 a is b는 False; if value is None: ...\n출처: Python 데이터 모델 문서",
+      "expected_topics": [
+        "equality",
+        "identity",
+        "is",
+        "==",
+        "comparison"
+      ]
     },
     {
       "id": "python_011",
@@ -113,8 +165,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Python 데코레이터(decorator)는 무엇이고 어떻게 작동하나요?",
-      "ground_truth": "데코레이터는 함수나 클래스를 수정하지 않고 기능을 추가하는 고차 함수입니다. @decorator 문법으로 사용하며, 함수를 인자로 받아 새로운 함수를 반환합니다.",
-      "expected_topics": ["decorator", "higher order function", "wrapper", "@syntax"]
+      "ground_truth": "개념: 데코레이터는 함수를 인자로 받아 감싸는 래퍼를 반환해 공통 부가 기능(로그, 권한 체크 등)을 재사용할 수 있게 하는 고차 함수다.\n예시: def logger(fn):\n    def wrapper(*a, **kw): print(fn.__name__); return fn(*a, **kw)\n    return wrapper\n\n@logger\ndef add(x, y): return x + y\n출처: Python 공식 문서 'Decorators'",
+      "expected_topics": [
+        "decorator",
+        "higher order function",
+        "wrapper",
+        "@syntax"
+      ]
     },
     {
       "id": "python_012",
@@ -122,8 +179,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Python 제너레이터(generator)와 일반 함수의 차이는?",
-      "ground_truth": "제너레이터는 yield 키워드를 사용하여 값을 하나씩 생성하며, 메모리 효율적입니다. 일반 함수는 return으로 모든 값을 한 번에 반환하지만, 제너레이터는 lazy evaluation으로 필요할 때마다 값을 생성합니다.",
-      "expected_topics": ["generator", "yield", "lazy evaluation", "memory efficient"]
+      "ground_truth": "개념: 제너레이터는 yield로 값을 순차적으로 내보내며 상태를 보존하는 이터레이터를 만들고, 일반 함수는 return으로 한 번에 값을 돌려준다.\n예시: def count():\n    for i in range(3):\n        yield i\nlist(count()) -> [0, 1, 2]\n출처: Python 튜토리얼 'Generator Expressions and Functions'",
+      "expected_topics": [
+        "generator",
+        "yield",
+        "lazy evaluation",
+        "memory efficient"
+      ]
     },
     {
       "id": "python_013",
@@ -131,8 +193,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 예외를 처리하는 올바른 방법은?",
-      "ground_truth": "try-except-else-finally 블록을 사용합니다. except에서 구체적인 예외 타입을 지정하고, finally는 항상 실행됩니다. 일반적인 Exception 대신 구체적인 예외를 잡는 것이 좋습니다.",
-      "expected_topics": ["exception handling", "try", "except", "finally", "specific exception"]
+      "ground_truth": "개념: 예외 처리는 try/except로 구체적 예외를 잡고 else에서 정상 흐름, finally에서 정리 코드를 실행하며 bare except는 피한다.\n예시: try: data = json.loads(txt)\nexcept json.JSONDecodeError as e: handle(e)\nelse: process(data)\nfinally: file.close()\n출처: Python Errors and Exceptions 문서",
+      "expected_topics": [
+        "exception handling",
+        "try",
+        "except",
+        "finally",
+        "specific exception"
+      ]
     },
     {
       "id": "python_014",
@@ -140,8 +208,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Python의 GIL(Global Interpreter Lock)은 무엇인가요?",
-      "ground_truth": "GIL은 한 번에 하나의 스레드만 Python 바이트코드를 실행할 수 있게 하는 뮤텍스입니다. CPU-bound 작업에서는 멀티스레딩 성능 향상이 제한되지만, I/O-bound 작업에는 영향이 적습니다.",
-      "expected_topics": ["GIL", "threading", "concurrency", "multiprocessing"]
+      "ground_truth": "개념: CPython GIL은 한 시점에 하나의 스레드만 바이트코드를 실행하게 하는 락으로 CPU-bound 작업에서는 스레드 병렬성이 제한되며, I/O-bound는 영향이 작다; 병렬 CPU 작업은 multiprocessing을 쓴다.\n예시: 이미지 변환처럼 CPU 집중 작업은 multiprocessing.Pool로 분산하고, 네트워크 요청은 threading/asyncio로 병렬화한다.\n출처: Python FAQ 'What is the Global Interpreter Lock (GIL)?'",
+      "expected_topics": [
+        "GIL",
+        "threading",
+        "concurrency",
+        "multiprocessing"
+      ]
     },
     {
       "id": "python_015",
@@ -149,8 +222,13 @@
       "difficulty": "medium",
       "type": "comparison",
       "question": "Python의 리스트와 NumPy 배열의 주요 차이점은?",
-      "ground_truth": "리스트는 다양한 타입을 저장할 수 있지만 느리고, NumPy 배열은 같은 타입만 저장하지만 벡터화 연산으로 매우 빠릅니다. NumPy는 과학 계산에 최적화되어 있습니다.",
-      "expected_topics": ["list", "numpy array", "performance", "vectorization"]
+      "ground_truth": "개념: 리스트는 파이썬 객체 포인터를 담는 일반 컨테이너이고, NumPy 배열은 고정 타입 연속 메모리로 벡터화 연산과 브로드캐스팅을 제공해 수치 계산이 빠르다.\n예시: arr = np.array([1, 2, 3]); arr * 2 -> array([2, 4, 6]) while [1, 2, 3] * 2 -> [1, 2, 3, 1, 2, 3]\n출처: NumPy 공식 문서 Quickstart",
+      "expected_topics": [
+        "list",
+        "numpy array",
+        "performance",
+        "vectorization"
+      ]
     },
     {
       "id": "python_016",
@@ -158,8 +236,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 컨텍스트 매니저(context manager)는 어떻게 만드나요?",
-      "ground_truth": "__enter__와 __exit__ 메서드를 구현하거나, contextlib.contextmanager 데코레이터를 사용합니다. with 문과 함께 사용하여 리소스 관리를 자동화합니다.",
-      "expected_topics": ["context manager", "__enter__", "__exit__", "with statement", "contextlib"]
+      "ground_truth": "개념: 컨텍스트 매니저는 __enter__/__exit__를 구현하거나 contextlib.contextmanager 데코레이터로 정의해 사용 종료 시 자원을 해제하도록 한다.\n예시: @contextmanager\ndef open_conn(url):\n    conn = connect(url)\n    try:\n        yield conn\n    finally:\n        conn.close()\n출처: Python contextlib 문서",
+      "expected_topics": [
+        "context manager",
+        "__enter__",
+        "__exit__",
+        "with statement",
+        "contextlib"
+      ]
     },
     {
       "id": "python_017",
@@ -167,8 +251,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Python의 덕 타이핑(duck typing)이란?",
-      "ground_truth": "객체의 타입보다 객체가 특정 메서드나 속성을 가지고 있는지가 중요한 개념입니다. '오리처럼 걷고 오리처럼 꽥꽥거리면 오리다'라는 원칙에서 유래했습니다.",
-      "expected_topics": ["duck typing", "dynamic typing", "EAFP", "interface"]
+      "ground_truth": "개념: 덕 타이핑은 객체의 타입보다 필요한 메서드/속성 유무로 동작을 결정하는 방식으로, 인터페이스만 맞으면 동일하게 취급한다.\n예시: write() 메서드만 있으면 sys.stdout, io.StringIO, 커스텀 파일 객체 모두 로거 함수에 전달할 수 있다.\n출처: Python Glossary 'Duck Typing'",
+      "expected_topics": [
+        "duck typing",
+        "dynamic typing",
+        "EAFP",
+        "interface"
+      ]
     },
     {
       "id": "python_018",
@@ -176,8 +265,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 클래스 메서드와 정적 메서드의 차이는?",
-      "ground_truth": "@classmethod는 첫 인자로 클래스(cls)를 받고, @staticmethod는 self나 cls를 받지 않습니다. 클래스 메서드는 클래스 변수에 접근하고, 정적 메서드는 독립적인 유틸리티 함수입니다.",
-      "expected_topics": ["classmethod", "staticmethod", "decorator", "cls", "self"]
+      "ground_truth": "개념: @classmethod는 첫 인자로 cls를 받아 클래스 상태(대안 생성자 등)를 다루고, @staticmethod는 암묵적 첫 인자 없이 네임스페이스용 유틸 함수를 제공한다.\n예시: @classmethod def from_env(cls): return cls(os.getenv('URL')); @staticmethod def is_valid(name): return bool(name)\n출처: Python 데이터 모델 / functions 문서",
+      "expected_topics": [
+        "classmethod",
+        "staticmethod",
+        "decorator",
+        "cls",
+        "self"
+      ]
     },
     {
       "id": "python_019",
@@ -185,8 +280,13 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Python에서 가변 기본 인자(mutable default argument)를 사용하면 안 되는 이유는?",
-      "ground_truth": "기본 인자는 함수 정의 시 한 번만 생성되므로, 가변 객체(리스트, 딕셔너리)를 기본값으로 사용하면 모든 호출에서 같은 객체를 공유합니다. 대신 None을 기본값으로 하고 함수 내부에서 생성해야 합니다.",
-      "expected_topics": ["mutable default argument", "function definition", "pitfall", "None"]
+      "ground_truth": "개념: 기본 인자는 정의 시 한 번만 평가되므로 가변 객체를 기본값으로 쓰면 호출 간 상태가 공유된다; None을 기본값으로 두고 내부에서 새 객체를 만든다.\n예시: def append_item(item, bucket=None): bucket = [] if bucket is None else bucket; bucket.append(item); return bucket\n출처: Python FAQ 'Mutable default argument'",
+      "expected_topics": [
+        "mutable default argument",
+        "function definition",
+        "pitfall",
+        "None"
+      ]
     },
     {
       "id": "python_020",
@@ -194,8 +294,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 람다(lambda) 함수는 언제 사용하나요?",
-      "ground_truth": "간단한 일회용 함수가 필요할 때 사용합니다. sorted(), map(), filter() 등과 함께 자주 쓰이지만, 복잡한 로직은 일반 함수로 작성하는 것이 좋습니다.",
-      "expected_topics": ["lambda", "anonymous function", "map", "filter", "sorted"]
+      "ground_truth": "개념: 람다는 이름 없는 단일 표현식 함수를 만들 때 사용하며, 정렬 키나 map/filter 등 콜백 자리에 간단한 연산을 넣을 때 적합하다.\n예시: sorted(users, key=lambda u: u['age'])\n출처: Python 튜토리얼 'Lambda Expressions'",
+      "expected_topics": [
+        "lambda",
+        "anonymous function",
+        "map",
+        "filter",
+        "sorted"
+      ]
     },
     {
       "id": "python_021",
@@ -203,8 +309,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Python의 __init__와 __new__의 차이는?",
-      "ground_truth": "__new__는 객체를 생성하고, __init__는 생성된 객체를 초기화합니다. __new__는 클래스 메서드이고 인스턴스를 반환하며, __init__는 인스턴스 메서드로 None을 반환합니다.",
-      "expected_topics": ["__new__", "__init__", "constructor", "initialization"]
+      "ground_truth": "개념: __new__는 인스턴스 생성(메모리 할당)을 담당하고 주로 불변 타입 서브클래스에서 재정의하며, __init__은 생성된 객체의 초기화를 담당한다.\n예시: class MyTuple(tuple):\n    def __new__(cls, iterable): return super().__new__(cls, sorted(iterable))\n    def __init__(self, iterable): pass\n출처: Python 데이터 모델 'Object customization'",
+      "expected_topics": [
+        "__new__",
+        "__init__",
+        "constructor",
+        "initialization"
+      ]
     },
     {
       "id": "python_022",
@@ -212,8 +323,13 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 여러 예외를 한 번에 처리하는 방법은?",
-      "ground_truth": "except (TypeError, ValueError) as e: 형태로 튜플을 사용하여 여러 예외를 한 번에 처리할 수 있습니다. 각 예외를 개별적으로 처리하려면 여러 except 블록을 사용합니다.",
-      "expected_topics": ["multiple exceptions", "except", "tuple", "exception handling"]
+      "ground_truth": "개념: except (A, B) 형태로 여러 예외를 한꺼번에 처리하거나 상황별로 별도 except 블록을 둘 수 있다.\n예시: try: value = int(raw)\nexcept (TypeError, ValueError) as exc: log(exc)\n출처: Python Errors and Exceptions 문서",
+      "expected_topics": [
+        "multiple exceptions",
+        "except",
+        "tuple",
+        "exception handling"
+      ]
     },
     {
       "id": "python_023",
@@ -221,8 +337,14 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Python에서 EAFP와 LBYL의 차이는?",
-      "ground_truth": "EAFP(Easier to Ask for Forgiveness than Permission)는 try-except로 먼저 실행하고, LBYL(Look Before You Leap)은 if 문으로 먼저 검사합니다. Python에서는 EAFP가 권장됩니다.",
-      "expected_topics": ["EAFP", "LBYL", "pythonic", "try-except", "if statement"]
+      "ground_truth": "개념: EAFP는 우선 시도 후 예외를 처리하는 스타일, LBYL은 사전 검증 후 실행하는 스타일이며, 파이썬에서는 경쟁 조건을 줄이기 위해 EAFP가 자주 쓰인다.\n예시: try: result = cache[key]\nexcept KeyError:\n    result = compute(); cache[key] = result  # EAFP\n# vs if key in cache: ... # LBYL\n출처: Python Glossary",
+      "expected_topics": [
+        "EAFP",
+        "LBYL",
+        "pythonic",
+        "try-except",
+        "if statement"
+      ]
     },
     {
       "id": "python_024",
@@ -230,8 +352,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 모듈을 임포트하는 다양한 방법은?",
-      "ground_truth": "import module, from module import func, import module as alias, from module import * 등이 있습니다. from module import *는 네임스페이스 오염으로 권장되지 않습니다.",
-      "expected_topics": ["import", "from", "alias", "namespace", "best practice"]
+      "ground_truth": "개념: 모듈 임포트는 import module, import module as alias, from module import name, from package import submodule, 상대 경로 임포트 등으로 할 수 있다.\n예시: import math as m; from collections import defaultdict; from .utils import helper\n출처: Python Modules 문서",
+      "expected_topics": [
+        "import",
+        "from",
+        "alias",
+        "namespace",
+        "best practice"
+      ]
     },
     {
       "id": "python_025",
@@ -239,8 +367,13 @@
       "difficulty": "hard",
       "type": "concept_explanation",
       "question": "Python의 메타클래스(metaclass)는 무엇이고 언제 사용하나요?",
-      "ground_truth": "메타클래스는 클래스의 클래스로, 클래스 생성 과정을 커스터마이즈합니다. type은 기본 메타클래스이며, ORM, API 프레임워크 등에서 동적 클래스 생성 시 사용합니다.",
-      "expected_topics": ["metaclass", "type", "class creation", "dynamic"]
+      "ground_truth": "개념: 메타클래스는 클래스를 만드는 클래스(type 서브클래스)로 클래스 생성 시 검증·등록·싱글톤 같은 규칙을 주입할 때 사용한다.\n예시: class Registry(type):\n    registry = {}\n    def __init__(cls, name, bases, attrs):\n        super().__init__(name, bases, attrs); Registry.registry[name] = cls\n\nclass Service(metaclass=Registry): pass\n출처: Python 데이터 모델 'Metaclasses'",
+      "expected_topics": [
+        "metaclass",
+        "type",
+        "class creation",
+        "dynamic"
+      ]
     },
     {
       "id": "python_026",
@@ -248,8 +381,14 @@
       "difficulty": "hard",
       "type": "concept_explanation",
       "question": "Python의 디스크립터(descriptor)는 무엇인가요?",
-      "ground_truth": "디스크립터는 __get__, __set__, __delete__ 중 하나 이상을 구현한 객체로, 속성 접근을 커스터마이즈합니다. property, classmethod, staticmethod가 디스크립터로 구현되어 있습니다.",
-      "expected_topics": ["descriptor", "__get__", "__set__", "property", "attribute access"]
+      "ground_truth": "개념: 디스크립터는 __get__/__set__/__delete__를 구현해 속성 접근을 가로채는 객체로, property와 @classmethod 등이 이를 기반으로 동작한다.\n예시: class Positive:\n    def __get__(self, obj, objtype=None): return obj._value\n    def __set__(self, obj, val):\n        if val < 0: raise ValueError('must be >=0')\n        obj._value = val\n\nclass Account: balance = Positive()\n출처: Python Descriptor HowTo Guide",
+      "expected_topics": [
+        "descriptor",
+        "__get__",
+        "__set__",
+        "property",
+        "attribute access"
+      ]
     },
     {
       "id": "python_027",
@@ -257,8 +396,13 @@
       "difficulty": "hard",
       "type": "troubleshooting",
       "question": "Python에서 순환 참조(circular reference) 문제를 해결하는 방법은?",
-      "ground_truth": "weakref 모듈을 사용하거나, 명시적으로 참조를 제거합니다. 또는 구조를 재설계하여 순환 참조를 피합니다. gc 모듈로 수동 가비지 컬렉션도 가능합니다.",
-      "expected_topics": ["circular reference", "weakref", "garbage collection", "memory leak"]
+      "ground_truth": "개념: 순환 참조는 객체가 서로를 가리켜 GC 해제가 지연되는 문제로, weakref로 약한 참조를 쓰거나 소멸자에서 참조를 끊고 필요 시 gc.collect로 강제 수집한다.\n예시: import weakref; self.parent = weakref.ref(parent)로 부모를 저장하거나 close()에서 child.parent = None으로 고리를 제거한다.\n출처: Python gc/weakref 모듈 문서",
+      "expected_topics": [
+        "circular reference",
+        "weakref",
+        "garbage collection",
+        "memory leak"
+      ]
     },
     {
       "id": "python_028",
@@ -266,8 +410,14 @@
       "difficulty": "hard",
       "type": "concept_explanation",
       "question": "Python의 asyncio와 threading의 차이는?",
-      "ground_truth": "asyncio는 단일 스레드에서 이벤트 루프로 비동기 I/O를 처리하고, threading은 여러 스레드를 사용합니다. asyncio는 I/O-bound 작업에 효율적이고, threading은 I/O 대기 시 다른 작업을 수행합니다.",
-      "expected_topics": ["asyncio", "threading", "concurrency", "event loop", "async/await"]
+      "ground_truth": "개념: asyncio는 단일 스레드 이벤트 루프에서 await로 협력적 컨커런시를 제공해 I/O를 효율적으로 처리하고, threading은 OS 스레드 기반으로 블로킹 작업 병렬성을 주지만 GIL로 CPU-bound 성능은 제한된다.\n예시: async with aiohttp.ClientSession(): await asyncio.gather(*tasks) (I/O); CPU 연산은 ThreadPoolExecutor나 ProcessPoolExecutor로 분리한다.\n출처: Python asyncio 문서 및 threading 문서",
+      "expected_topics": [
+        "asyncio",
+        "threading",
+        "concurrency",
+        "event loop",
+        "async/await"
+      ]
     },
     {
       "id": "python_029",
@@ -275,8 +425,14 @@
       "difficulty": "hard",
       "type": "best_practice",
       "question": "Python에서 메모리 누수를 방지하는 방법은?",
-      "ground_truth": "순환 참조 제거, weakref 사용, 명시적 리소스 해제(with 문), __del__ 남용 피하기, gc 모듈 활용 등이 있습니다. 프로파일러로 메모리 사용을 모니터링합니다.",
-      "expected_topics": ["memory leak", "weakref", "resource management", "profiler", "gc"]
+      "ground_truth": "개념: 파일/소켓을 컨텍스트 매니저로 닫고, 전역 캐시를 제한하거나 weakref를 쓰며, tracemalloc으로 누수 지점을 추적하고 순환 참조·__del__ 조합을 피하면 메모리 누수를 줄일 수 있다.\n예시: with open('data.csv') as f: ...; cache = weakref.WeakValueDictionary(); tracemalloc.start(); print(tracemalloc.take_snapshot())\n출처: Python tracemalloc/weakref/gc 문서",
+      "expected_topics": [
+        "memory leak",
+        "weakref",
+        "resource management",
+        "profiler",
+        "gc"
+      ]
     },
     {
       "id": "python_030",
@@ -284,8 +440,14 @@
       "difficulty": "hard",
       "type": "usage_how_to",
       "question": "Python에서 멀티프로세싱과 멀티스레딩 중 어떤 것을 선택해야 하나요?",
-      "ground_truth": "CPU-bound 작업은 multiprocessing(GIL 우회), I/O-bound 작업은 threading 또는 asyncio를 사용합니다. 각 프로세스는 독립적인 메모리를 가지므로 오버헤드가 큽니다.",
-      "expected_topics": ["multiprocessing", "threading", "GIL", "CPU-bound", "I/O-bound"]
+      "ground_truth": "개념: CPU-bound 작업은 multiprocessing(ProcessPoolExecutor 등)으로 GIL을 우회하고, I/O-bound 작업은 threading/async가 오버헤드가 적다; 데이터 직렬화/공유 비용도 고려한다.\n예시: with ProcessPoolExecutor() as pool: results = list(pool.map(expensive_fn, items)); HTTP 호출은 ThreadPoolExecutor(max_workers=8)로 처리한다.\n출처: Python concurrent.futures 문서",
+      "expected_topics": [
+        "multiprocessing",
+        "threading",
+        "GIL",
+        "CPU-bound",
+        "I/O-bound"
+      ]
     },
     {
       "id": "python_031",
@@ -293,8 +455,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Python에서 문자열을 대문자와 소문자로 변환하는 방법은?",
-      "ground_truth": "str.upper()는 대문자로, str.lower()는 소문자로 변환합니다. str.title()은 각 단어의 첫 글자를 대문자로, str.capitalize()는 첫 글자만 대문자로 만듭니다.",
-      "expected_topics": ["string", "upper", "lower", "title", "capitalize"]
+      "ground_truth": "개념: 문자열을 대문자/소문자로 변환할 때 upper(), lower(), title(), casefold() 등을 사용하며 casefold는 국제 문자 비교에 더 강력하다.\n예시: 'Hello'.lower() -> 'hello'; 'straße'.casefold() -> 'strasse'\n출처: Python str 메서드 문서",
+      "expected_topics": [
+        "string",
+        "upper",
+        "lower",
+        "title",
+        "capitalize"
+      ]
     },
     {
       "id": "python_032",
@@ -302,8 +470,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Python에서 리스트를 정렬하는 방법은?",
-      "ground_truth": "list.sort()는 원본을 수정하고 None을 반환하며, sorted(list)는 새로운 정렬된 리스트를 반환합니다. reverse=True로 역순 정렬, key 인자로 정렬 기준을 지정할 수 있습니다.",
-      "expected_topics": ["sort", "sorted", "reverse", "key", "in-place"]
+      "ground_truth": "개념: list.sort()는 리스트를 제자리 정렬하고 None을 반환하며, sorted(iterable, key, reverse)는 새 리스트를 반환한다; 기본 정렬은 안정적이다.\n예시: numbers = [3, 1, 2]; numbers.sort(); sorted_users = sorted(users, key=lambda u: u['name'], reverse=True)\n출처: Python list 및 sorted 내장 함수 문서",
+      "expected_topics": [
+        "sort",
+        "sorted",
+        "reverse",
+        "key",
+        "in-place"
+      ]
     },
     {
       "id": "python_033",
@@ -311,8 +485,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Python의 클로저(closure)란 무엇인가요?",
-      "ground_truth": "클로저는 함수가 정의된 환경의 변수를 기억하는 함수입니다. 중첩 함수에서 외부 함수의 변수를 참조할 때 클로저가 형성됩니다.",
-      "expected_topics": ["closure", "nested function", "scope", "enclosing"]
+      "ground_truth": "개념: 클로저는 중첩 함수가 외부 스코프 변수를 포착해 상태를 유지하는 함수로 상태ful 콜백이나 팩토리에 쓰인다.\n예시: def make_multiplier(n):\n    def mul(x): return x * n\n    return mul\n\ndouble = make_multiplier(2); double(5) -> 10\n출처: Python 튜토리얼 'Nested functions and closures'",
+      "expected_topics": [
+        "closure",
+        "nested function",
+        "scope",
+        "enclosing"
+      ]
     },
     {
       "id": "python_034",
@@ -320,8 +499,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 JSON 데이터를 다루는 방법은?",
-      "ground_truth": "json 모듈을 사용합니다. json.dumps()는 Python 객체를 JSON 문자열로, json.loads()는 JSON 문자열을 Python 객체로 변환합니다. 파일은 json.dump()와 json.load()를 사용합니다.",
-      "expected_topics": ["json", "dumps", "loads", "serialization", "deserialization"]
+      "ground_truth": "개념: json.loads/json.dumps는 문자열을 파싱·직렬화하고, json.load/json.dump는 파일을 대상으로 하며 indent와 ensure_ascii=False로 가독성과 UTF-8 출력을 제어한다.\n예시: with open('data.json') as f: data = json.load(f); json.dump(data, open('out.json', 'w'), ensure_ascii=False, indent=2)\n출처: Python json 모듈 문서",
+      "expected_topics": [
+        "json",
+        "dumps",
+        "loads",
+        "serialization",
+        "deserialization"
+      ]
     },
     {
       "id": "python_035",
@@ -329,8 +514,13 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Python에서 상수를 정의하는 관례는?",
-      "ground_truth": "모든 글자를 대문자로 작성하고 언더스코어로 단어를 구분합니다(예: MAX_SIZE = 100). Python에는 진짜 상수가 없으므로 이는 단지 관례입니다.",
-      "expected_topics": ["constant", "naming convention", "uppercase", "PEP 8"]
+      "ground_truth": "개념: 파이썬은 상수를 강제하지 않지만 모듈 상단에 대문자+언더스코어로 정의하고 변경하지 않는 관례를 따르며, Enum/typing.Final로 의도를 명시할 수 있다.\n예시: MAX_RETRIES = 3; from typing import Final; API_URL: Final = 'https://api.example.com'\n출처: PEP 8 Style Guide / typing.Final",
+      "expected_topics": [
+        "constant",
+        "naming convention",
+        "uppercase",
+        "PEP 8"
+      ]
     },
     {
       "id": "python_036",
@@ -338,8 +528,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 enumerate()와 zip()의 사용법은?",
-      "ground_truth": "enumerate(iterable)은 인덱스와 값을 튜플로 반환하고, zip(iter1, iter2)는 여러 iterable을 병렬로 순회합니다. for i, val in enumerate(list) 형태로 사용합니다.",
-      "expected_topics": ["enumerate", "zip", "iteration", "index", "parallel"]
+      "ground_truth": "개념: enumerate(iterable, start=0)은 인덱스와 값을 주고, zip(iter1, iter2, ...)는 여러 이터러블을 병렬로 묶어 가장 짧은 길이까지만 순회한다.\n예시: for idx, item in enumerate(items, start=1): ...; for name, score in zip(names, scores): print(name, score)\n출처: Python 내장 함수 문서",
+      "expected_topics": [
+        "enumerate",
+        "zip",
+        "iteration",
+        "index",
+        "parallel"
+      ]
     },
     {
       "id": "python_037",
@@ -347,8 +543,14 @@
       "difficulty": "hard",
       "type": "concept_explanation",
       "question": "Python의 추상 베이스 클래스(ABC)는 언제 사용하나요?",
-      "ground_truth": "abc 모듈의 ABC를 상속하고 @abstractmethod로 구현을 강제할 메서드를 표시합니다. 인터페이스를 정의하고 다형성을 구현할 때 사용하며, 추상 메서드를 구현하지 않으면 인스턴스화할 수 없습니다.",
-      "expected_topics": ["ABC", "abstract base class", "abstractmethod", "interface", "polymorphism"]
+      "ground_truth": "개념: abc.ABC와 @abstractmethod로 인터페이스를 정의하면 서브클래스가 필수 메서드를 구현하지 않으면 인스턴스화가 막혀 공통 계약을 보장한다.\n예시: class Storage(ABC): @abstractmethod def save(self, data): ...; class S3Storage(Storage): def save(self, data): upload(data)\n출처: Python abc 모듈 문서",
+      "expected_topics": [
+        "ABC",
+        "abstract base class",
+        "abstractmethod",
+        "interface",
+        "polymorphism"
+      ]
     },
     {
       "id": "python_038",
@@ -356,8 +558,14 @@
       "difficulty": "hard",
       "type": "troubleshooting",
       "question": "Python에서 RecursionError를 해결하는 방법은?",
-      "ground_truth": "재귀 깊이를 줄이거나, sys.setrecursionlimit()로 제한을 늘립니다. 더 나은 방법은 재귀를 반복문으로 변환하거나, 메모이제이션(functools.lru_cache)을 사용하는 것입니다.",
-      "expected_topics": ["RecursionError", "recursion limit", "memoization", "lru_cache", "iteration"]
+      "ground_truth": "개념: 재귀 깊이가 너무 깊으면 RecursionError가 발생하므로 종료 조건을 명확히 하고, 필요 시 반복문/명시적 스택으로 전환하거나 sys.setrecursionlimit로 안전한 한도를 올린다.\n예시: sys.setrecursionlimit(2000); 또는 DFS를 while 스택으로 구현해 콜스택 사용을 줄인다.\n출처: Python sys 모듈 문서 / FAQ on recursion",
+      "expected_topics": [
+        "RecursionError",
+        "recursion limit",
+        "memoization",
+        "lru_cache",
+        "iteration"
+      ]
     },
     {
       "id": "python_039",
@@ -365,8 +573,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Python에서 리스트의 중복을 제거하는 방법은?",
-      "ground_truth": "set()으로 변환 후 다시 list()로 변환하지만 순서가 보장되지 않습니다. 순서를 유지하려면 dict.fromkeys(list)나 리스트 컴프리헨션을 사용합니다.",
-      "expected_topics": ["duplicate removal", "set", "dict.fromkeys", "list", "order preservation"]
+      "ground_truth": "개념: set 변환으로 중복을 제거할 수 있지만 순서를 잃으며, dict.fromkeys나 seen 집합 패턴을 쓰면 순서를 유지하면서 중복을 건너뛸 수 있다.\n예시: unique = list(dict.fromkeys(items)); seen = set(); result = []\nfor x in items:\n    if x in seen: continue\n    seen.add(x); result.append(x)\n출처: Python dict/set 사용 예시",
+      "expected_topics": [
+        "duplicate removal",
+        "set",
+        "dict.fromkeys",
+        "list",
+        "order preservation"
+      ]
     },
     {
       "id": "python_040",
@@ -374,8 +588,14 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Python에서 전역 변수를 사용할 때 주의할 점은?",
-      "ground_truth": "함수 내에서 전역 변수를 수정하려면 global 키워드를 사용해야 합니다. 하지만 전역 변수는 코드 이해를 어렵게 하므로, 함수 인자와 반환값을 사용하거나 클래스를 사용하는 것이 좋습니다.",
-      "expected_topics": ["global variable", "global keyword", "scope", "best practice", "code smell"]
+      "ground_truth": "개념: 전역 변수는 테스트·동시성에서 예측 가능성을 떨어뜨리므로 최소화하고, 함수 내부에서 수정 시 global 키워드가 필요하다; 공유 상태는 인자나 객체로 넘기는 편이 안전하다.\n예시: global counter; counter += 1 대신 Counter 클래스나 의존성 주입으로 상태를 관리하고, 스레드 환경에서는 Lock으로 보호한다.\n출처: Python FAQ 및 PEP 8 권장사항",
+      "expected_topics": [
+        "global variable",
+        "global keyword",
+        "scope",
+        "best practice",
+        "code smell"
+      ]
     },
     {
       "id": "git_001",
@@ -383,8 +603,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 새로운 브랜치를 만들고 전환하는 명령어는?",
-      "ground_truth": "git checkout -b <branch-name> 또는 git switch -c <branch-name>을 사용합니다. -b나 -c 옵션은 브랜치를 생성하고 바로 전환합니다.",
-      "expected_topics": ["git branch", "git checkout", "git switch", "create branch"]
+      "ground_truth": "개념: 새 브랜치는 git branch <name>으로 만들고 git switch <name> 또는 git checkout <name>으로 전환하며, git switch -c/checkout -b로 생성과 전환을 한 번에 수행한다.\n예시: git switch -c feature/login\n출처: Git 공식 문서 git-switch / git-branch",
+      "expected_topics": [
+        "git branch",
+        "git checkout",
+        "git switch",
+        "create branch"
+      ]
     },
     {
       "id": "git_002",
@@ -392,8 +617,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 변경사항을 스테이징하고 커밋하는 방법은?",
-      "ground_truth": "git add <file>로 스테이징하고 git commit -m 'message'로 커밋합니다. git add .는 모든 변경사항을 스테이징하고, git commit -am은 수정된 파일을 동시에 스테이징하고 커밋합니다.",
-      "expected_topics": ["git add", "git commit", "staging", "commit message"]
+      "ground_truth": "개념: 작업한 파일을 git add로 스테이징한 뒤 git commit -m '메시지'로 스냅샷을 남기며, git status로 상태를 확인한다.\n예시: git add app.py templates/ && git commit -m \"Add login view\"\n출처: Pro Git 'Basic Snapshotting'",
+      "expected_topics": [
+        "git add",
+        "git commit",
+        "staging",
+        "commit message"
+      ]
     },
     {
       "id": "git_003",
@@ -401,8 +631,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 커밋 히스토리를 보는 명령어는?",
-      "ground_truth": "git log를 사용합니다. git log --oneline은 한 줄로 요약하고, git log --graph는 브랜치 그래프를 보여주며, git log -p는 각 커밋의 변경 내용을 표시합니다.",
-      "expected_topics": ["git log", "commit history", "oneline", "graph", "diff"]
+      "ground_truth": "개념: 커밋 히스토리는 git log로 확인하며 --oneline --graph --decorate 옵션으로 간략한 브랜치 그래프를 볼 수 있다.\n예시: git log --oneline --graph --decorate -5\n출처: git-log 매뉴얼",
+      "expected_topics": [
+        "git log",
+        "commit history",
+        "oneline",
+        "graph",
+        "diff"
+      ]
     },
     {
       "id": "git_004",
@@ -410,8 +646,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Git의 staging area(스테이징 영역)란 무엇인가요?",
-      "ground_truth": "작업 디렉토리와 Git 저장소 사이의 중간 영역으로, 다음 커밋에 포함될 변경사항을 준비하는 곳입니다. git add로 파일을 스테이징 영역에 추가합니다.",
-      "expected_topics": ["staging area", "index", "git add", "working directory"]
+      "ground_truth": "개념: 스테이징 영역(index)은 다음 커밋에 포함할 변경을 선택적으로 올려두는 중간 버퍼로, 워킹 디렉터리와 리포지터리 사이에서 커밋 내용을 구성한다.\n예시: git add file.py로 index에 올리고, git reset HEAD file.py로 내린다.\n출처: Pro Git 2장 'Git 기초'",
+      "expected_topics": [
+        "staging area",
+        "index",
+        "git add",
+        "working directory"
+      ]
     },
     {
       "id": "git_005",
@@ -419,8 +660,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 원격 저장소에 변경사항을 업로드하는 명령어는?",
-      "ground_truth": "git push <remote> <branch>를 사용합니다. 보통 git push origin main처럼 사용하며, -u 옵션으로 upstream을 설정하면 이후에는 git push만 입력해도 됩니다.",
-      "expected_topics": ["git push", "remote", "origin", "upstream", "-u"]
+      "ground_truth": "개념: 로컬 브랜치 변경을 원격에 올릴 때 git push <remote> <branch>를 사용하며, 최초에는 -u로 업스트림을 설정하면 이후 git push로 단축된다.\n예시: git push -u origin feature/auth\n출처: git-push 매뉴얼",
+      "expected_topics": [
+        "git push",
+        "remote",
+        "origin",
+        "upstream",
+        "-u"
+      ]
     },
     {
       "id": "git_006",
@@ -428,8 +675,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 원격 저장소의 변경사항을 가져오는 방법은?",
-      "ground_truth": "git pull은 fetch + merge를 한 번에 수행하고, git fetch는 변경사항만 가져옵니다. git fetch 후 git merge를 수동으로 실행하면 더 안전합니다.",
-      "expected_topics": ["git pull", "git fetch", "git merge", "remote", "update"]
+      "ground_truth": "개념: git fetch로 원격 최신 커밋과 브랜치를 가져오고, 필요 시 merge/rebase로 로컬 브랜치에 통합한다; git pull은 fetch+merge/rebase를 한 번에 수행한다.\n예시: git fetch origin main && git merge origin/main\n출처: git-fetch 매뉴얼",
+      "expected_topics": [
+        "git pull",
+        "git fetch",
+        "git merge",
+        "remote",
+        "update"
+      ]
     },
     {
       "id": "git_007",
@@ -437,8 +690,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Git에서 HEAD는 무엇을 의미하나요?",
-      "ground_truth": "HEAD는 현재 체크아웃된 커밋이나 브랜치를 가리키는 포인터입니다. 보통 현재 브랜치의 최신 커밋을 가리키며, detached HEAD 상태에서는 특정 커밋을 직접 가리킵니다.",
-      "expected_topics": ["HEAD", "pointer", "current commit", "detached HEAD"]
+      "ground_truth": "개념: HEAD는 현재 체크아웃한 커밋을 가리키는 포인터로 보통 현재 브랜치의 최신 커밋을 참조하며, 이동하면 작업 트리 기준이 바뀐다.\n예시: git rev-parse --abbrev-ref HEAD -> 현재 브랜치; git checkout <commit>은 HEAD를 해당 커밋으로 이동시킨다.\n출처: Git Glossary - HEAD",
+      "expected_topics": [
+        "HEAD",
+        "pointer",
+        "current commit",
+        "detached HEAD"
+      ]
     },
     {
       "id": "git_008",
@@ -446,8 +704,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 파일을 삭제하고 이를 기록하는 방법은?",
-      "ground_truth": "git rm <file>을 사용하면 파일을 삭제하고 자동으로 스테이징합니다. 파일은 삭제하지 않고 Git 추적만 중지하려면 git rm --cached <file>을 사용합니다.",
-      "expected_topics": ["git rm", "delete file", "untrack", "--cached"]
+      "ground_truth": "개념: git rm <file>로 워킹 트리와 스테이징 영역에서 파일을 삭제하고 커밋하면 기록되며, 이미 삭제한 파일은 git rm <file>로 스테이지하거나 추적만 끊으려면 git rm --cached를 사용한다.\n예시: git rm obsolete.log && git commit -m \"Remove old log\"\n출처: git-rm 매뉴얼",
+      "expected_topics": [
+        "git rm",
+        "delete file",
+        "untrack",
+        "--cached"
+      ]
     },
     {
       "id": "git_009",
@@ -455,8 +718,14 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 특정 파일의 변경 이력을 보는 방법은?",
-      "ground_truth": "git log <file>로 커밋 히스토리를 보고, git log -p <file>로 각 커밋의 변경 내용을 확인합니다. git blame <file>은 각 줄이 누구에 의해 언제 수정되었는지 보여줍니다.",
-      "expected_topics": ["git log", "git blame", "file history", "commit", "author"]
+      "ground_truth": "개념: 특정 파일의 변경 이력은 git log -- <file> 또는 git log -p -- <file>로 확인하고, 줄 단위 책임은 git blame <file>로 본다.\n예시: git log -p -- src/settings.py\n출처: git-log 매뉴얼",
+      "expected_topics": [
+        "git log",
+        "git blame",
+        "file history",
+        "commit",
+        "author"
+      ]
     },
     {
       "id": "git_010",
@@ -464,8 +733,13 @@
       "difficulty": "easy",
       "type": "concept_explanation",
       "question": "Git의 .gitignore 파일은 무엇인가요?",
-      "ground_truth": ".gitignore에 명시된 파일이나 디렉토리는 Git이 추적하지 않습니다. 빌드 산출물, 임시 파일, 환경 설정 등을 무시할 때 사용합니다. 패턴 매칭을 지원합니다.",
-      "expected_topics": [".gitignore", "untracked files", "pattern", "ignore"]
+      "ground_truth": "개념: .gitignore는 추적하지 않을 파일/폴더 패턴을 정의하며 이미 추적된 파일에는 영향을 주지 않는다; 프로젝트 루트나 하위 디렉터리에 둘 수 있다.\n예시: .gitignore에 __pycache__/ 와 .env를 추가하고 git status로 무시되는지 확인한다.\n출처: gitignore 문서",
+      "expected_topics": [
+        ".gitignore",
+        "untracked files",
+        "pattern",
+        "ignore"
+      ]
     },
     {
       "id": "git_011",
@@ -473,8 +747,14 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Git에서 merge와 rebase의 차이는?",
-      "ground_truth": "merge는 두 브랜치를 합치는 새 커밋을 생성하고 히스토리를 보존합니다. rebase는 한 브랜치의 커밋을 다른 브랜치 위로 재배치하여 선형 히스토리를 만듭니다. rebase는 공유된 브랜치에서는 피해야 합니다.",
-      "expected_topics": ["git merge", "git rebase", "history", "linear", "conflict"]
+      "ground_truth": "개념: merge는 두 브랜치의 기록을 통합해 새 커밋을 만들고, rebase는 내 커밋을 다른 베이스 위로 재적용해 직선형 히스토리를 만든다(공유 브랜치에서는 주의 필요).\n예시: feature 브랜치에서 git merge main 또는 git rebase main\n출처: Pro Git '브랜치 관리'",
+      "expected_topics": [
+        "git merge",
+        "git rebase",
+        "history",
+        "linear",
+        "conflict"
+      ]
     },
     {
       "id": "git_012",
@@ -482,8 +762,13 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 마지막 커밋을 수정하는 방법은?",
-      "ground_truth": "git commit --amend를 사용합니다. 커밋 메시지만 수정하거나, 추가 변경사항을 포함할 수 있습니다. 이미 push한 커밋은 amend하지 않는 것이 좋습니다.",
-      "expected_topics": ["git commit", "--amend", "modify commit", "rewrite history"]
+      "ground_truth": "개념: git commit --amend로 직전 커밋 메시지나 스테이징된 변경을 덧붙여 새 커밋으로 교체하며, 이미 push한 경우 강제 푸시가 필요해 협업 시 주의한다.\n예시: git add fix.py && git commit --amend -m \"Fix config parsing\"\n출처: git-commit 매뉴얼",
+      "expected_topics": [
+        "git commit",
+        "--amend",
+        "modify commit",
+        "rewrite history"
+      ]
     },
     {
       "id": "git_013",
@@ -491,8 +776,13 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 특정 커밋의 변경사항만 가져오는 방법은?",
-      "ground_truth": "git cherry-pick <commit-hash>를 사용합니다. 특정 커밋의 변경사항을 현재 브랜치에 적용하며, 여러 커밋을 한 번에 cherry-pick할 수도 있습니다.",
-      "expected_topics": ["git cherry-pick", "commit", "apply changes", "selective merge"]
+      "ground_truth": "개념: git cherry-pick <sha>는 지정한 커밋의 변경을 현재 브랜치에 적용해 새 커밋을 만든다; 여러 커밋이나 범위도 지정 가능하며 충돌 시 해결 후 --continue 한다.\n예시: git cherry-pick 1a2b3c4 또는 git cherry-pick A..B\n출처: git-cherry-pick 매뉴얼",
+      "expected_topics": [
+        "git cherry-pick",
+        "commit",
+        "apply changes",
+        "selective merge"
+      ]
     },
     {
       "id": "git_014",
@@ -500,8 +790,13 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 작업 중인 변경사항을 임시 저장하는 방법은?",
-      "ground_truth": "git stash를 사용하여 변경사항을 임시 저장하고, git stash pop으로 복원합니다. git stash list로 목록을 보고, git stash apply로 특정 stash를 적용할 수 있습니다.",
-      "expected_topics": ["git stash", "temporary save", "stash pop", "stash list"]
+      "ground_truth": "개념: git stash push [-m 메시지]로 작업 트리 변경을 임시 저장 후 깨끗한 상태로 돌아가며, git stash list/pop/apply로 다시 꺼낸다.\n예시: git stash push -m \"wip: tests\" && git stash pop\n출처: git-stash 매뉴얼",
+      "expected_topics": [
+        "git stash",
+        "temporary save",
+        "stash pop",
+        "stash list"
+      ]
     },
     {
       "id": "git_015",
@@ -509,8 +804,13 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Git에서 fast-forward merge란?",
-      "ground_truth": "대상 브랜치가 현재 브랜치의 직접적인 조상일 때, 포인터만 이동하여 병합하는 방식입니다. 별도의 merge 커밋이 생성되지 않으며, --no-ff 옵션으로 강제로 merge 커밋을 만들 수 있습니다.",
-      "expected_topics": ["fast-forward", "merge", "no-ff", "linear history"]
+      "ground_truth": "개념: 대상 브랜치가 분기 후 추가 커밋이 없을 때 merge 시 단순히 브랜치 포인터만 앞당기는 fast-forward가 되며, 기록이 깔끔하지만 병합 커밋은 남지 않는다.\n예시: git merge --ff-only feature/payment\n출처: Git Glossary / git-merge 매뉴얼",
+      "expected_topics": [
+        "fast-forward",
+        "merge",
+        "no-ff",
+        "linear history"
+      ]
     },
     {
       "id": "git_016",
@@ -518,8 +818,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 커밋을 취소하는 방법들은?",
-      "ground_truth": "git reset은 커밋 히스토리를 재작성하고(--soft, --mixed, --hard), git revert는 변경사항을 되돌리는 새 커밋을 생성합니다. 공유 브랜치에서는 revert를 사용해야 합니다.",
-      "expected_topics": ["git reset", "git revert", "undo commit", "soft", "hard"]
+      "ground_truth": "개념: 공개 이력을 되돌릴 땐 git revert <sha>로 반대 변경 커밋을 만들고, 로컬 브랜치를 이전 상태로 되돌릴 땐 git reset --soft/--hard <sha>나 git restore --source를 사용한다.\n예시: git revert HEAD~1 (공유 브랜치 안전), 또는 git reset --hard HEAD~1 (로컬 변경 폐기용)\n출처: git-revert 및 git-reset 매뉴얼",
+      "expected_topics": [
+        "git reset",
+        "git revert",
+        "undo commit",
+        "soft",
+        "hard"
+      ]
     },
     {
       "id": "git_017",
@@ -527,8 +833,13 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 리모트 브랜치를 삭제하는 방법은?",
-      "ground_truth": "git push origin --delete <branch-name> 또는 git push origin :<branch-name>을 사용합니다. 로컬 브랜치는 git branch -d <branch-name>으로 삭제합니다.",
-      "expected_topics": ["git push", "delete branch", "remote branch", "git branch -d"]
+      "ground_truth": "개념: 로컬 브랜치는 git branch -d/-D로 삭제하고, 원격 브랜치는 git push <remote> --delete <name> 또는 git push <remote> :<name>으로 삭제한다.\n예시: git push origin --delete feature/login\n출처: git-branch / git-push 매뉴얼",
+      "expected_topics": [
+        "git push",
+        "delete branch",
+        "remote branch",
+        "git branch -d"
+      ]
     },
     {
       "id": "git_018",
@@ -536,8 +847,14 @@
       "difficulty": "medium",
       "type": "troubleshooting",
       "question": "Git에서 merge conflict가 발생했을 때 해결 방법은?",
-      "ground_truth": "충돌이 발생한 파일을 열어 <<<<<<<, =======, >>>>>>> 마커를 찾아 수동으로 수정합니다. 수정 후 git add로 스테이징하고 git commit으로 병합을 완료합니다. git merge --abort로 병합을 취소할 수도 있습니다.",
-      "expected_topics": ["merge conflict", "conflict markers", "resolve", "git add", "abort"]
+      "ground_truth": "개념: 충돌이 나면 충돌 마커를 편집해 올바른 내용으로 합친 뒤 git add로 표시하고 git merge --continue(또는 git commit)로 병합을 마친다; git status로 대상 파일을 확인한다.\n예시: 충돌 파일 수정 -> git add conflicted.py -> git merge --continue\n출처: git-merge 매뉴얼",
+      "expected_topics": [
+        "merge conflict",
+        "conflict markers",
+        "resolve",
+        "git add",
+        "abort"
+      ]
     },
     {
       "id": "git_019",
@@ -545,8 +862,14 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Git에서 좋은 커밋 메시지를 작성하는 방법은?",
-      "ground_truth": "첫 줄은 50자 이내로 요약하고, 두 번째 줄은 비우며, 본문은 72자로 줄바꿈합니다. 명령형 현재 시제('Add feature', not 'Added')를 사용하고, 무엇을 왜 변경했는지 설명합니다.",
-      "expected_topics": ["commit message", "convention", "imperative mood", "summary", "body"]
+      "ground_truth": "개념: 50자 내외 명령형 한 줄 요약, 빈 줄, 본문에 무엇/왜 설명과 이슈 참조를 포함하는 형식이 좋은 커밋 메시지다.\n예시: Fix login validation\n\n- reject blank email\n- add unit test\n출처: Git 커밋 메시지 가이드 / Conventional Commits",
+      "expected_topics": [
+        "commit message",
+        "convention",
+        "imperative mood",
+        "summary",
+        "body"
+      ]
     },
     {
       "id": "git_020",
@@ -554,8 +877,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 태그(tag)는 어떻게 사용하나요?",
-      "ground_truth": "git tag <tag-name>으로 lightweight 태그를, git tag -a <tag-name> -m 'message'로 annotated 태그를 생성합니다. git push origin <tag-name>으로 원격에 푸시하며, 주로 릴리스 버전 표시에 사용합니다.",
-      "expected_topics": ["git tag", "lightweight", "annotated", "version", "release"]
+      "ground_truth": "개념: 태그는 특정 커밋에 버전 라벨을 붙이며 lightweight와 annotated가 있다; git tag -a v1.0 -m \"Release\" 후 git push origin v1.0으로 배포한다.\n예시: git tag -a v0.1.0 -m \"First release\" && git push origin v0.1.0\n출처: git-tag 매뉴얼",
+      "expected_topics": [
+        "git tag",
+        "lightweight",
+        "annotated",
+        "version",
+        "release"
+      ]
     },
     {
       "id": "git_021",
@@ -563,8 +892,14 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Git의 detached HEAD 상태란?",
-      "ground_truth": "HEAD가 브랜치가 아닌 특정 커밋을 직접 가리키는 상태입니다. 이 상태에서 커밋하면 브랜치에 속하지 않아 나중에 찾기 어려울 수 있으므로, 새 브랜치를 만들어야 합니다.",
-      "expected_topics": ["detached HEAD", "commit", "branch", "checkout", "warning"]
+      "ground_truth": "개념: 브랜치가 아닌 특정 커밋을 checkout하면 HEAD가 detached 상태가 되어 새 커밋이 어떤 브랜치에도 연결되지 않으므로, 작업을 유지하려면 새 브랜치를 만들어야 한다.\n예시: git checkout <commit> 후 git switch -c hotfix-from-old로 브랜치를 만든다.\n출처: Git Glossary - detached HEAD",
+      "expected_topics": [
+        "detached HEAD",
+        "commit",
+        "branch",
+        "checkout",
+        "warning"
+      ]
     },
     {
       "id": "git_022",
@@ -572,8 +907,14 @@
       "difficulty": "hard",
       "type": "usage_how_to",
       "question": "Git에서 interactive rebase는 어떻게 사용하나요?",
-      "ground_truth": "git rebase -i <base>를 사용하여 커밋을 재정렬, 합치기(squash), 수정(edit), 삭제(drop)할 수 있습니다. 공유되지 않은 브랜치에서만 사용해야 하며, 커밋 히스토리를 깔끔하게 정리할 때 유용합니다.",
-      "expected_topics": ["interactive rebase", "squash", "reorder", "edit", "history rewrite"]
+      "ground_truth": "개념: git rebase -i <base>로 커밋 목록을 열어 pick/squash/reword 등으로 순서 변경이나 병합, 메시지 수정이 가능하며 주로 푸시 전 히스토리 정리에 사용한다.\n예시: git rebase -i HEAD~4 후 에디터에서 squash/reword 선택\n출처: git-rebase 매뉴얼",
+      "expected_topics": [
+        "interactive rebase",
+        "squash",
+        "reorder",
+        "edit",
+        "history rewrite"
+      ]
     },
     {
       "id": "git_023",
@@ -581,8 +922,14 @@
       "difficulty": "hard",
       "type": "usage_how_to",
       "question": "Git에서 submodule은 어떻게 사용하나요?",
-      "ground_truth": "git submodule add <repository> <path>로 추가하고, git submodule update --init으로 초기화합니다. 서브모듈은 별도 저장소를 프로젝트 내에 포함할 때 사용하며, 각각 독립적으로 버전 관리됩니다.",
-      "expected_topics": ["git submodule", "add", "update", "init", "nested repository"]
+      "ground_truth": "개념: 외부 저장소를 하위 디렉터리로 포함하려면 git submodule add <repo> <path>로 추가하고, clone 후 git submodule update --init --recursive로 가져오며 서브모듈 커밋을 명시적으로 업데이트해야 한다.\n예시: git submodule add https://github.com/org/lib.git libs/lib && git submodule update --init --recursive\n출처: git-submodule 매뉴얼",
+      "expected_topics": [
+        "git submodule",
+        "add",
+        "update",
+        "init",
+        "nested repository"
+      ]
     },
     {
       "id": "git_024",
@@ -590,8 +937,14 @@
       "difficulty": "hard",
       "type": "troubleshooting",
       "question": "Git에서 잘못된 push를 되돌리는 방법은?",
-      "ground_truth": "git revert로 되돌리는 새 커밋을 만들거나(안전), git reset + force push(위험)를 사용합니다. 공유 브랜치에서는 revert를 사용해야 하며, force push는 팀원과 조율 후 사용합니다.",
-      "expected_topics": ["git revert", "git reset", "force push", "undo push", "collaboration"]
+      "ground_truth": "개념: 공개 브랜치에서 잘못 푸시된 변경은 git revert <sha>로 되돌리는 커밋을 추가하는 것이 안전하며, 히스토리 재작성이 허용되면 git reset --hard <good> 후 git push --force-with-lease로 정정한다.\n예시: git revert bad123; 또는 git reset --hard HEAD~1 && git push --force-with-lease origin main (팀 합의 필요)\n출처: git-revert / git-reset / git-push 매뉴얼",
+      "expected_topics": [
+        "git revert",
+        "git reset",
+        "force push",
+        "undo push",
+        "collaboration"
+      ]
     },
     {
       "id": "git_025",
@@ -599,8 +952,14 @@
       "difficulty": "hard",
       "type": "concept_explanation",
       "question": "Git의 reflog는 무엇이고 언제 사용하나요?",
-      "ground_truth": "reflog는 HEAD와 브랜치 참조의 변경 기록을 저장합니다. git reflog로 확인하며, 잘못된 reset이나 rebase 후 커밋을 복구할 때 사용합니다. 로컬에만 존재하며 일정 기간 후 삭제됩니다.",
-      "expected_topics": ["git reflog", "HEAD history", "recovery", "undo", "local"]
+      "ground_truth": "개념: reflog는 HEAD와 브랜치 이동 기록을 저장해 실수로 잃어버린 커밋을 복구할 때 사용하며, git reflog로 확인 후 해당 위치로 reset/checkout할 수 있다.\n예시: git reflog; git reset --hard HEAD@{3}\n출처: git-reflog 매뉴얼",
+      "expected_topics": [
+        "git reflog",
+        "HEAD history",
+        "recovery",
+        "undo",
+        "local"
+      ]
     },
     {
       "id": "git_026",
@@ -608,8 +967,14 @@
       "difficulty": "hard",
       "type": "best_practice",
       "question": "Git에서 force push를 해야 할 때와 주의사항은?",
-      "ground_truth": "rebase나 amend 후 필요하지만, 공유 브랜치에서는 피해야 합니다. --force-with-lease를 사용하면 원격에 새 커밋이 있을 때 push를 차단하여 더 안전합니다. 팀원과 소통이 필수입니다.",
-      "expected_topics": ["force push", "--force-with-lease", "danger", "collaboration", "safety"]
+      "ground_truth": "개념: rebase/amend 후 공유 브랜치에 반영해야 할 때 --force-with-lease로 푸시하면 다른 사람의 원격 변경을 덮어쓰지 않도록 보호하며, 팀원과 사전 합의가 필요하다.\n예시: git push --force-with-lease origin feature/docs\n출처: git-push 매뉴얼",
+      "expected_topics": [
+        "force push",
+        "--force-with-lease",
+        "danger",
+        "collaboration",
+        "safety"
+      ]
     },
     {
       "id": "git_027",
@@ -617,8 +982,14 @@
       "difficulty": "hard",
       "type": "usage_how_to",
       "question": "Git에서 bisect는 어떻게 사용하나요?",
-      "ground_truth": "git bisect start로 시작하고, git bisect bad <commit>과 git bisect good <commit>으로 범위를 지정합니다. 이진 탐색으로 버그가 발생한 커밋을 찾으며, 각 단계에서 good/bad를 표시합니다.",
-      "expected_topics": ["git bisect", "binary search", "bug finding", "good", "bad"]
+      "ground_truth": "개념: git bisect는 좋은 커밋과 나쁜 커밋을 지정해 이분 탐색으로 문제 커밋을 찾으며, 수동으로 good/bad를 표시하거나 테스트 스크립트로 자동화할 수 있다.\n예시: git bisect start HEAD v1.0.0; git bisect run pytest tests/test_bug.py; git bisect reset\n출처: git-bisect 매뉴얼",
+      "expected_topics": [
+        "git bisect",
+        "binary search",
+        "bug finding",
+        "good",
+        "bad"
+      ]
     },
     {
       "id": "git_028",
@@ -626,8 +997,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 브랜치 이름을 변경하는 방법은?",
-      "ground_truth": "현재 브랜치는 git branch -m <new-name>, 다른 브랜치는 git branch -m <old-name> <new-name>으로 변경합니다. 원격 브랜치는 삭제 후 새 이름으로 다시 push해야 합니다.",
-      "expected_topics": ["git branch", "rename", "-m", "local", "remote"]
+      "ground_truth": "개념: 현재 브랜치를 포함해 이름을 바꿀 때 git branch -m <새이름>을 사용하고, 원격에도 반영하려면 새 이름으로 푸시 후 기존 원격 브랜치를 삭제한다.\n예시: git branch -m feature/login auth/login; git push origin -u auth/login; git push origin --delete feature/login\n출처: git-branch 매뉴얼",
+      "expected_topics": [
+        "git branch",
+        "rename",
+        "-m",
+        "local",
+        "remote"
+      ]
     },
     {
       "id": "git_029",
@@ -635,8 +1012,14 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Git에서 작은 커밋을 자주 하는 것이 좋은 이유는?",
-      "ground_truth": "작은 커밋은 이해하기 쉽고, 문제 발생 시 원인을 찾기 쉬우며, revert나 cherry-pick이 간단합니다. 논리적으로 관련된 변경사항을 하나의 커밋으로 그룹화하는 것이 좋습니다.",
-      "expected_topics": ["commit size", "atomic commit", "best practice", "revert", "review"]
+      "ground_truth": "개념: 작은 단위로 자주 커밋하면 리뷰·롤백·bisect가 쉬워지고 충돌 범위가 줄어 개발 흐름이 안정적이다.\n예시: 기능/버그별로 테스트가 통과하는 최소 변경을 커밋하고 PR을 묶는다.\n출처: Git 워크플로 모범 사례 (GitHub Flow/Trunk Based Development)",
+      "expected_topics": [
+        "commit size",
+        "atomic commit",
+        "best practice",
+        "revert",
+        "review"
+      ]
     },
     {
       "id": "git_030",
@@ -644,8 +1027,14 @@
       "difficulty": "hard",
       "type": "troubleshooting",
       "question": "Git에서 대용량 파일 문제를 해결하는 방법은?",
-      "ground_truth": "Git LFS(Large File Storage)를 사용하여 대용량 파일을 별도로 관리합니다. 이미 커밋된 대용량 파일은 git filter-branch나 BFG Repo-Cleaner로 히스토리에서 제거할 수 있습니다.",
-      "expected_topics": ["Git LFS", "large files", "filter-branch", "BFG", "history rewrite"]
+      "ground_truth": "개념: 대용량 바이너리는 .gitignore로 제외하거나 Git LFS로 추적해 저장소 팽창을 막고, 이미 올라간 파일은 git filter-repo/BFG로 기록에서 제거한다.\n예시: git lfs install; git lfs track \"*.mp4\" && git add .gitattributes; 기존 히스토리는 git filter-repo --path bigfile.iso --invert-paths\n출처: Git LFS 문서 / git-filter-repo",
+      "expected_topics": [
+        "Git LFS",
+        "large files",
+        "filter-branch",
+        "BFG",
+        "history rewrite"
+      ]
     },
     {
       "id": "git_031",
@@ -653,8 +1042,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 현재 상태를 확인하는 명령어는?",
-      "ground_truth": "git status로 수정된 파일, 스테이징된 파일, 브랜치 상태를 확인합니다. -s 옵션으로 간략하게 볼 수 있습니다.",
-      "expected_topics": ["git status", "working directory", "staging", "modified"]
+      "ground_truth": "개념: 현재 브랜치와 스테이징/작업 디렉터리 차이를 확인하려면 git status를 사용하며, -sb 옵션으로 요약 출력이 가능하다.\n예시: git status -sb\n출처: git-status 매뉴얼",
+      "expected_topics": [
+        "git status",
+        "working directory",
+        "staging",
+        "modified"
+      ]
     },
     {
       "id": "git_032",
@@ -662,8 +1056,13 @@
       "difficulty": "easy",
       "type": "usage_how_to",
       "question": "Git에서 파일의 변경사항을 확인하는 방법은?",
-      "ground_truth": "git diff는 작업 디렉토리와 스테이징 영역의 차이를, git diff --staged는 스테이징 영역과 마지막 커밋의 차이를 보여줍니다.",
-      "expected_topics": ["git diff", "changes", "staged", "working directory"]
+      "ground_truth": "개념: 변경 내용은 git diff로 작업 트리와 인덱스 차이를 보고, git diff --cached로 스테이징된 내용, git diff HEAD -- <path>로 최신 커밋 대비 특정 파일 차이를 볼 수 있다.\n예시: git diff --cached src/app.py\n출처: git-diff 매뉴얼",
+      "expected_topics": [
+        "git diff",
+        "changes",
+        "staged",
+        "working directory"
+      ]
     },
     {
       "id": "git_033",
@@ -671,8 +1070,14 @@
       "difficulty": "medium",
       "type": "concept_explanation",
       "question": "Git의 origin이란 무엇인가요?",
-      "ground_truth": "origin은 원격 저장소의 기본 이름(별칭)입니다. git clone 시 자동으로 설정되며, git remote -v로 확인할 수 있습니다. 다른 이름으로 변경하거나 여러 원격 저장소를 추가할 수도 있습니다.",
-      "expected_topics": ["origin", "remote", "alias", "git clone", "git remote"]
+      "ground_truth": "개념: origin은 클론 시 자동 생성되는 기본 원격 이름으로 원본 저장소 URL을 가리키며, git remote set-url로 변경하거나 추가 원격을 정의할 수 있다.\n예시: git remote -v로 origin URL을 확인하고, git remote set-url origin git@github.com:org/repo.git\n출처: Git Glossary - origin",
+      "expected_topics": [
+        "origin",
+        "remote",
+        "alias",
+        "git clone",
+        "git remote"
+      ]
     },
     {
       "id": "git_034",
@@ -680,8 +1085,14 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 원격 브랜치를 추적하는 방법은?",
-      "ground_truth": "git checkout --track origin/<branch>나 git checkout <branch>(원격에만 있는 경우)로 자동 추적합니다. git branch -u origin/<branch>로 기존 브랜치에 upstream을 설정할 수 있습니다.",
-      "expected_topics": ["tracking branch", "upstream", "--track", "git checkout", "remote"]
+      "ground_truth": "개념: 원격 브랜치를 추적하려면 git switch --track origin/<name> 또는 git checkout --track origin/<name>으로 로컬 브랜치를 만들고, 기존 브랜치는 git branch --set-upstream-to로 upstream을 설정한다.\n예시: git switch --track origin/develop 또는 git branch --set-upstream-to=origin/develop develop\n출처: git-branch 매뉴얼",
+      "expected_topics": [
+        "tracking branch",
+        "upstream",
+        "--track",
+        "git checkout",
+        "remote"
+      ]
     },
     {
       "id": "git_035",
@@ -689,8 +1100,14 @@
       "difficulty": "medium",
       "type": "best_practice",
       "question": "Git에서 main 브랜치에 직접 커밋하지 않는 이유는?",
-      "ground_truth": "main은 안정적인 프로덕션 코드를 유지해야 하므로, feature 브랜치에서 작업하고 리뷰 후 merge하는 것이 좋습니다. 이는 협업과 코드 품질을 위한 best practice입니다.",
-      "expected_topics": ["main branch", "feature branch", "code review", "workflow", "best practice"]
+      "ground_truth": "개념: main/master에 직접 커밋하면 안정성과 리뷰 흐름이 깨지므로 기능 브랜치를 만들어 PR/코드리뷰와 CI를 거친 뒤 병합하는 것이 안전하다.\n예시: git switch -c feature/payment; 작업 후 PR로 main에 merge\n출처: GitHub Flow / Trunk Based Development 가이드",
+      "expected_topics": [
+        "main branch",
+        "feature branch",
+        "code review",
+        "workflow",
+        "best practice"
+      ]
     },
     {
       "id": "git_036",
@@ -698,8 +1115,14 @@
       "difficulty": "hard",
       "type": "usage_how_to",
       "question": "Git에서 특정 파일의 변경사항만 커밋하는 방법은?",
-      "ground_truth": "git add <file>로 특정 파일만 스테이징하거나, git add -p로 파일 내 일부 변경사항만 선택적으로 스테이징할 수 있습니다. -p는 hunk 단위로 선택할 수 있습니다.",
-      "expected_topics": ["git add", "selective staging", "-p", "patch", "hunk"]
+      "ground_truth": "개념: 변경 중 일부만 커밋하려면 대상 파일이나 hunk만 git add로 스테이징하고 git commit에 포함시키며, git add -p로 부분 선택이 가능하다.\n예시: git add src/api.py && git add -p tests/test_api.py; git commit -m \"Fix API error handling\"\n출처: git-add 매뉴얼",
+      "expected_topics": [
+        "git add",
+        "selective staging",
+        "-p",
+        "patch",
+        "hunk"
+      ]
     },
     {
       "id": "git_037",
@@ -707,8 +1130,13 @@
       "difficulty": "medium",
       "type": "troubleshooting",
       "question": "Git에서 실수로 스테이징한 파일을 unstage하는 방법은?",
-      "ground_truth": "git reset <file> 또는 git restore --staged <file>을 사용합니다. 모든 파일을 unstage하려면 git reset을 인자 없이 실행합니다.",
-      "expected_topics": ["unstage", "git reset", "git restore", "staging area"]
+      "ground_truth": "개념: 잘못 스테이지한 파일은 git reset HEAD <file> 또는 git restore --staged <file>로 인덱스에서만 제거하고 워킹 트리 변경은 보존한다.\n예시: git restore --staged config/.env\n출처: git-restore / git-reset 매뉴얼",
+      "expected_topics": [
+        "unstage",
+        "git reset",
+        "git restore",
+        "staging area"
+      ]
     },
     {
       "id": "git_038",
@@ -716,8 +1144,13 @@
       "difficulty": "medium",
       "type": "usage_how_to",
       "question": "Git에서 다른 브랜치의 특정 파일만 가져오는 방법은?",
-      "ground_truth": "git checkout <branch> -- <file>을 사용하여 다른 브랜치의 특정 파일을 현재 브랜치로 가져옵니다. 여러 파일을 한 번에 가져올 수도 있습니다.",
-      "expected_topics": ["git checkout", "file from branch", "selective merge", "copy file"]
+      "ground_truth": "개념: 다른 브랜치의 특정 파일만 가져오려면 git restore -s <branch> -- <path> 또는 git checkout <branch> -- <path>를 사용한다.\n예시: git restore -s main -- README.md\n출처: git-restore 매뉴얼",
+      "expected_topics": [
+        "git checkout",
+        "file from branch",
+        "selective merge",
+        "copy file"
+      ]
     },
     {
       "id": "git_039",
@@ -725,8 +1158,14 @@
       "difficulty": "hard",
       "type": "best_practice",
       "question": "Git에서 feature 브랜치를 main에 merge하기 전 권장사항은?",
-      "ground_truth": "main을 feature 브랜치로 rebase하거나 merge하여 최신 상태로 만들고, 충돌을 미리 해결합니다. 테스트를 실행하고, 코드 리뷰를 받은 후 merge합니다.",
-      "expected_topics": ["feature branch", "rebase", "conflict resolution", "testing", "code review"]
+      "ground_truth": "개념: 병합 전에는 메인과 최신 동기화(fetch 후 rebase/merge), 테스트 통과, 코드 리뷰를 거쳐 충돌을 선제적으로 해결하고 배포 준비를 확인한다.\n예시: git fetch origin && git rebase origin/main; pytest; 리뷰 승인 후 merge\n출처: GitHub Flow 베스트 프랙티스",
+      "expected_topics": [
+        "feature branch",
+        "rebase",
+        "conflict resolution",
+        "testing",
+        "code review"
+      ]
     },
     {
       "id": "git_040",
@@ -734,8 +1173,15 @@
       "difficulty": "hard",
       "type": "concept_explanation",
       "question": "Git의 세 가지 영역(working directory, staging, repository)의 관계는?",
-      "ground_truth": "working directory는 실제 작업 공간, staging은 다음 커밋 준비 영역, repository는 커밋된 히스토리입니다. git add로 working → staging, git commit으로 staging → repository로 이동합니다.",
-      "expected_topics": ["three trees", "working directory", "staging", "repository", "git add", "git commit"]
+      "ground_truth": "개념: working directory는 수정 중인 실제 파일, staging area(index)는 다음 커밋에 포함될 스냅샷, repository는 커밋 객체를 저장하는 영역이다; git add로 스테이징 후 git commit으로 리포지터리에 기록한다.\n예시: 파일 수정 -> git add file.py -> git commit -m \"msg\"; git status가 각 영역 차이를 보여준다.\n출처: Pro Git 2장 'Git 기초'",
+      "expected_topics": [
+        "three trees",
+        "working directory",
+        "staging",
+        "repository",
+        "git add",
+        "git commit"
+      ]
     }
   ]
 }

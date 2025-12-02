@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-RAGAS Evaluation Script for Enhanced RAG Pipeline
-Evaluates Python and Git questions (40 each = 80 total)
+RAGAS Evaluation Script
+- Supports both Optimized (Enhanced) RAG and LangGraph RAG
+- Evaluates Python and Git questions (40 each = 80 total)
 """
+import argparse
 import json
 import logging
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -58,14 +60,80 @@ def load_evaluation_questions(file_path: str = "ragas_evaluation_questions.json"
     return data["questions"]
 
 
-def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> List[Dict]:
-    """Run RAG pipeline on all questions and collect results"""
+class OptimizedRAGRunner:
+    """Wrapper for the existing EnhancedRAGPipeline (optimized version)"""
+
+    def __init__(self, config_path: str):
+        self.pipeline = EnhancedRAGPipeline(config_path)
+
+    def answer_with_contexts(self, question: str) -> Tuple[str, List[str], Dict[str, Any]]:
+        """Return answer, contexts, and optional metadata."""
+        answer, contexts = self.pipeline.answer_with_contexts(question)
+        return answer, contexts, {"pipeline_type": "optimized"}
+
+
+class LangGraphRAGRunner:
+    """Wrapper for the LangGraph RAG workflow"""
+
+    def __init__(self, config_path: str):
+        # Lazy imports to avoid loading LangGraph when not needed
+        from langgraph_rag.config import get_config
+        from langgraph_rag.graph import create_rag_graph
+        from langgraph_rag.state import create_initial_state
+
+        # Initialize config/global resources once
+        self.config = get_config(config_path)
+        self.create_state = create_initial_state
+        self.graph = create_rag_graph()
+
+    def answer_with_contexts(self, question: str) -> Tuple[str, List[str], Dict[str, Any]]:
+        """Execute LangGraph and return answer + contexts + metadata."""
+        final_state: Optional[Dict[str, Any]] = None
+
+        initial_state = self.create_state(question)
+        for state in self.graph.stream(initial_state):
+            # state is a mapping of node name -> RAGState
+            for _, node_state in state.items():
+                final_state = node_state
+
+        if not final_state:
+            raise RuntimeError("LangGraph pipeline returned no state")
+
+        contexts = final_state.get("final_documents") or final_state.get("documents") or []
+        metadatas = final_state.get("final_metadatas") or final_state.get("metadatas") or []
+
+        metadata = {
+            "pipeline_type": "langgraph",
+            "workflow_history": final_state.get("workflow_history", []),
+            "route": final_state.get("route"),
+            "retry_count": final_state.get("retry_count"),
+            "hallucination_grade": final_state.get("hallucination_grade"),
+            "answer_usefulness": final_state.get("answer_usefulness"),
+            "intent": final_state.get("intent"),
+            "context_metadata": metadatas,
+        }
+
+        return final_state.get("generation", ""), contexts, metadata
+
+
+def build_pipeline_runner(pipeline_type: str, config_path: str):
+    """Factory that returns the appropriate RAG runner."""
+    pipeline_type = pipeline_type.lower()
+    if pipeline_type == "optimized":
+        return OptimizedRAGRunner(config_path)
+    if pipeline_type == "langgraph":
+        return LangGraphRAGRunner(config_path)
+    raise ValueError(f"Unsupported pipeline type: {pipeline_type}")
+
+
+def run_rag_pipeline(pipeline_runner: Any, questions: List[Dict], pipeline_label: str) -> List[Dict]:
+    """Run the selected RAG pipeline on all questions and collect results"""
     logger = logging.getLogger(__name__)
 
     results = []
     total_time = 0
 
-    logger.info(f"Running RAG pipeline on {len(questions)} questions...")
+    logger.info(f"Running {pipeline_label} pipeline on {len(questions)} questions...")
 
     for i, q in enumerate(questions, 1):
         question_text = q["question"]
@@ -79,8 +147,8 @@ def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> Li
         try:
             start_time = time.time()
 
-            # OPTIMIZATION: Use answer_with_contexts() to avoid double retrieve()
-            answer, contexts = pipeline.answer_with_contexts(question_text)
+            answer, contexts, metadata = pipeline_runner.answer_with_contexts(question_text)
+            context_metadata = metadata.pop("context_metadata", [])
 
             elapsed = time.time() - start_time
             total_time += elapsed
@@ -91,6 +159,8 @@ def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> Li
                 "ground_truth": q["ground_truth"],
                 "answer": answer,
                 "contexts": contexts,
+                "context_metadata": context_metadata,
+                "pipeline_metadata": metadata,
                 "domain": domain,
                 "difficulty": difficulty,
                 "type": q["type"],
@@ -110,6 +180,8 @@ def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> Li
                 "ground_truth": q["ground_truth"],
                 "answer": "",
                 "contexts": [],
+                "context_metadata": [],
+                "pipeline_metadata": {"error": str(e)},
                 "domain": domain,
                 "difficulty": difficulty,
                 "type": q["type"],
@@ -120,7 +192,7 @@ def run_rag_pipeline(pipeline: EnhancedRAGPipeline, questions: List[Dict]) -> Li
 
         results.append(result)
 
-    avg_time = total_time / len(questions)
+    avg_time = total_time / len(questions) if questions else 0
     logger.info(f"\n{'='*80}")
     logger.info(f"Pipeline execution complete:")
     logger.info(f"  Total questions: {len(questions)}")
@@ -211,7 +283,10 @@ def run_ragas_evaluation(dataset: Dataset) -> Dict:
 def save_results(
     results: List[Dict],
     ragas_scores: Dict,
-    output_dir: str = "artifacts/ragas_evals"
+    output_dir: str = "artifacts/ragas_evals",
+    pipeline_label: str = "Enhanced RAG",
+    config_path: str = "config/enhanced.yaml",
+    questions_path: str = "ragas_evaluation_questions.json",
 ):
     """Save evaluation results to JSON and generate report"""
     logger = logging.getLogger(__name__)
@@ -225,6 +300,9 @@ def save_results(
     results_file = output_path / f"ragas_eval_{timestamp}_detailed.json"
     output_data = {
         "timestamp": timestamp,
+        "pipeline": pipeline_label,
+        "config_path": config_path,
+        "questions_path": questions_path,
         "total_questions": len(results),
         "successful": sum(1 for r in results if r["success"]),
         "ragas_scores": ragas_scores,
@@ -246,8 +324,9 @@ def save_results(
         f.write("="*80 + "\n\n")
 
         f.write(f"Timestamp: {timestamp}\n")
-        f.write(f"Pipeline: Enhanced RAG (Hybrid Search + Context Quality Filter)\n")
-        f.write(f"Config: config/enhanced.yaml\n\n")
+        f.write(f"Pipeline: {pipeline_label}\n")
+        f.write(f"Config: {config_path}\n")
+        f.write(f"Questions: {questions_path}\n\n")
 
         f.write(f"Total Questions: {len(results)}\n")
         f.write(f"Successful: {sum(1 for r in results if r['success'])}\n")
@@ -350,18 +429,54 @@ def print_summary(ragas_scores: Dict):
     print("\n" + "="*80)
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments"""
+    parser = argparse.ArgumentParser(description="Run RAGAS benchmark against RAG pipelines")
+    parser.add_argument(
+        "--pipeline",
+        choices=["langgraph", "optimized"],
+        default="langgraph",
+        help="Which pipeline to evaluate (default: langgraph)",
+    )
+    parser.add_argument(
+        "--config",
+        default="config/enhanced.yaml",
+        help="Path to the pipeline config file",
+    )
+    parser.add_argument(
+        "--questions",
+        default="ragas_evaluation_questions.json",
+        help="Path to evaluation question set",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="artifacts/ragas_evals",
+        help="Directory to store evaluation artifacts",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level",
+    )
+    return parser.parse_args()
+
+
 def main():
     """Main evaluation function"""
-    setup_logging("INFO")
+    args = parse_args()
+    setup_logging(args.log_level)
     logger = logging.getLogger(__name__)
 
+    pipeline_label = "LangGraph RAG" if args.pipeline == "langgraph" else "Optimized RAG"
+
     logger.info("="*80)
-    logger.info("RAGAS EVALUATION - Enhanced RAG Pipeline")
+    logger.info(f"RAGAS EVALUATION - {pipeline_label}")
     logger.info("="*80)
 
     # Load evaluation questions
     logger.info("\nLoading evaluation questions...")
-    questions = load_evaluation_questions()
+    questions = load_evaluation_questions(args.questions)
     logger.info(f"Loaded {len(questions)} questions")
 
     # Filter by domain (optional)
@@ -370,10 +485,12 @@ def main():
 
     logger.info(f"  Python: {len(python_questions)}")
     logger.info(f"  Git: {len(git_questions)}")
+    logger.info(f"Questions file: {args.questions}")
+    logger.info(f"Config file: {args.config}")
 
     # Initialize RAG pipeline
-    logger.info("\nInitializing Enhanced RAG Pipeline...")
-    pipeline = EnhancedRAGPipeline("config/enhanced.yaml")
+    logger.info(f"\nInitializing {pipeline_label}...")
+    pipeline_runner = build_pipeline_runner(args.pipeline, args.config)
     logger.info("✓ Pipeline initialized")
 
     # Run RAG pipeline on all questions
@@ -381,7 +498,7 @@ def main():
     logger.info("STEP 1: Running RAG Pipeline")
     logger.info("="*80)
 
-    results = run_rag_pipeline(pipeline, questions)
+    results = run_rag_pipeline(pipeline_runner, questions, pipeline_label)
 
     # Prepare RAGAS dataset
     logger.info("\n" + "="*80)
@@ -403,7 +520,14 @@ def main():
     logger.info("STEP 4: Saving Results")
     logger.info("="*80)
 
-    results_file, report_file = save_results(results, ragas_scores)
+    results_file, report_file = save_results(
+        results,
+        ragas_scores,
+        output_dir=args.output_dir,
+        pipeline_label=pipeline_label,
+        config_path=args.config,
+        questions_path=args.questions,
+    )
 
     # Print summary
     print_summary(ragas_scores)
