@@ -55,9 +55,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global RAG instance
+# Global RAG instance and configuration
 rag_instance = None
 rag_type = None
+config_path = None
 
 
 # === Request/Response Models ===
@@ -310,12 +311,18 @@ def process_langgraph_rag(
 @app.on_event("startup")
 async def startup_event():
     """Initialize RAG system on server start"""
-    global rag_instance, rag_type
+    global rag_instance, rag_type, config_path
 
     logger.info("Starting Unified RAG API Server")
 
-    config_path = app.state.config_path
-    rag_type = app.state.rag_type
+    # Load from environment variables if not set
+    if config_path is None:
+        config_path = os.environ.get('RAG_CONFIG_PATH', 'config/enhanced.yaml')
+    if rag_type is None:
+        rag_type = os.environ.get('RAG_TYPE', 'langgraph')
+
+    logger.info(f"RAG Type: {rag_type}")
+    logger.info(f"Config: {config_path}")
 
     try:
         if rag_type == "optimized":
@@ -462,9 +469,13 @@ if __name__ == "__main__":
     args = parse_args()
     setup_logging(args.log_level)
 
-    # Store config in app state
-    app.state.config_path = args.config
-    app.state.rag_type = args.rag_type
+    # Store config in global variables
+    config_path = args.config
+    rag_type = args.rag_type
+
+    # Also set environment variables for reload support
+    os.environ['RAG_CONFIG_PATH'] = args.config
+    os.environ['RAG_TYPE'] = args.rag_type
 
     logger.info(f"Starting Unified RAG API Server")
     logger.info(f"RAG Type: {args.rag_type}")
