@@ -39,12 +39,15 @@ print("=" * 100)
 # ==================== 데이터 로드 ====================
 print("\n[1/8] 데이터 로드 중...")
 
+# 분석 대상 도메인 설정 (git과 python만)
+TARGET_DOMAINS = ['git', 'python']
+
 # 크롤링 데이터 로드
 raw_data_path = Path("data/raw")
 domains_data = {}
 
 for domain_path in raw_data_path.iterdir():
-    if domain_path.is_dir():
+    if domain_path.is_dir() and domain_path.name in TARGET_DOMAINS:
         pages_file = domain_path / "pages.json"
         if pages_file.exists():
             with open(pages_file, 'r', encoding='utf-8') as f:
@@ -59,7 +62,10 @@ if not chunks_file.exists():
 
 df_chunks = pd.read_parquet(chunks_file)
 
-print(f"  ✓ 로드 완료: {len(domains_data)}개 도메인, {len(df_chunks)}개 청크")
+# 분석 대상 도메인으로 필터링
+df_chunks = df_chunks[df_chunks['domain'].isin(TARGET_DOMAINS)]
+
+print(f"  ✓ 로드 완료: {len(domains_data)}개 도메인 (git, python), {len(df_chunks)}개 청크")
 
 
 # ==================== 기본 통계 ====================
@@ -603,8 +609,26 @@ json_stats = {
     }
 }
 
+# numpy 타입을 Python native 타입으로 변환하는 함수
+def convert_to_native_types(obj):
+    """numpy 타입을 Python native 타입으로 변환"""
+    if isinstance(obj, dict):
+        return {k: convert_to_native_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_native_types(item) for item in obj]
+    elif isinstance(obj, (np.integer, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
+json_stats_native = convert_to_native_types(json_stats)
+
 with open(OUTPUT_DIR / 'statistics.json', 'w', encoding='utf-8') as f:
-    json.dump(json_stats, f, ensure_ascii=False, indent=2)
+    json.dump(json_stats_native, f, ensure_ascii=False, indent=2)
 
 print(f"  ✓ JSON 저장: {OUTPUT_DIR / 'statistics.json'}")
 
