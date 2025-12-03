@@ -1,11 +1,6 @@
 """
 RAG Pipeline Data Analysis and Visualization
 Developer Learning Assistant Chatbot - RunPod Environment Analysis Report
-
-Analysis Items:
-- Document/Chunk statistics by domain
-- Chunk length distribution analysis
-- RAG performance metrics visualization
 """
 
 import json
@@ -14,18 +9,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from collections import Counter
 import warnings
 
 warnings.filterwarnings('ignore')
 
-# Visualization style settings (English only, no Korean fonts)
+# Visualization settings - English only
 sns.set_style("whitegrid")
 sns.set_palette("husl")
 plt.rcParams['font.size'] = 10
 
 # Output directory
-OUTPUT_DIR = Path("rag_analysis_output")
+OUTPUT_DIR = Path("rag_analysis_output1")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 print("=" * 100)
@@ -62,7 +56,7 @@ df_chunks = pd.read_parquet(chunks_file)
 # Filter by target domains
 df_chunks = df_chunks[df_chunks['domain'].isin(TARGET_DOMAINS)]
 
-print(f"  ✓ Loaded: {len(domains_data)} domains (git, python), {len(df_chunks)} chunks")
+print(f"  SUCCESS: Loaded {len(domains_data)} domains (git, python), {len(df_chunks)} chunks")
 
 
 # ==================== Basic Statistics ====================
@@ -97,7 +91,7 @@ stats['overall'] = {
     'max_chunk_length': df_chunks['length'].max(),
 }
 
-print("  ✓ Statistics calculated")
+print("  SUCCESS: Statistics calculated")
 
 
 # ==================== Research-Level Analysis ====================
@@ -123,11 +117,10 @@ for domain in df_chunks['domain'].unique():
         'chunk_percentage': round(len(domain_chunks) / len(df_chunks) * 100, 2),
         'avg_chunk_length': round(domain_chunks['length'].mean(), 2),
         'std_chunk_length': round(domain_chunks['length'].std(), 2),
-        'cv': round(domain_chunks['length'].std() / domain_chunks['length'].mean(), 3),  # Coefficient of Variation
+        'cv': round(domain_chunks['length'].std() / domain_chunks['length'].mean(), 3),
     }
 
-# Retrieval Efficiency metrics (based on chunk size)
-# Ideal chunk size: 512-1024 tokens (approximately 2000-4000 characters)
+# Retrieval Efficiency metrics
 ideal_min, ideal_max = 2000, 4000
 ideal_chunks = df_chunks[(df_chunks['length'] >= ideal_min) & (df_chunks['length'] <= ideal_max)]
 research_analysis['retrieval_efficiency'] = {
@@ -136,9 +129,8 @@ research_analysis['retrieval_efficiency'] = {
     'too_large_chunks': round(len(df_chunks[df_chunks['length'] > ideal_max]) / len(df_chunks) * 100, 2),
 }
 
-# Vocabulary Diversity (simple token-based analysis)
+# Vocabulary Diversity
 def calculate_vocabulary_diversity(texts):
-    """Calculate vocabulary diversity of texts"""
     all_words = ' '.join(texts.astype(str)).lower().split()
     unique_words = len(set(all_words))
     total_words = len(all_words)
@@ -149,10 +141,10 @@ for domain in df_chunks['domain'].unique():
     domain_texts = df_chunks[df_chunks['domain'] == domain]['text']
     research_analysis['vocabulary_diversity'][domain] = calculate_vocabulary_diversity(domain_texts)
 
-print("  ✓ Research analysis completed")
+print("  SUCCESS: Research analysis completed")
 
 
-# ==================== Visualization 1: Overall Chunk Length Distribution ====================
+# ==================== Visualization 1: Overall Distribution ====================
 print("\n[4/8] Visualization 1: Overall Chunk Length Distribution...")
 
 fig, ax = plt.subplots(figsize=(16, 10))
@@ -167,10 +159,10 @@ ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '01_overall_chunk_length_distribution.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 01_overall_chunk_length_distribution.png")
+print("  SUCCESS: Saved 01_overall_chunk_length_distribution.png")
 
 
-# ==================== Visualization 2: Chunk Length Distribution by Domain ====================
+# ==================== Visualization 2: Distribution by Domain ====================
 print("\n[5/8] Visualization 2: Chunk Length Distribution by Domain...")
 
 fig, axes = plt.subplots(1, 2, figsize=(20, 8))
@@ -185,7 +177,7 @@ for i, domain in enumerate(domains):
     axes[i].axvline(domain_data.median(), color='green', linestyle='--', linewidth=2, label=f'Median: {domain_data.median():.0f}')
     axes[i].set_xlabel('Chunk Length (characters)', fontsize=12, fontweight='bold')
     axes[i].set_ylabel('Frequency', fontsize=12, fontweight='bold')
-    axes[i].set_title(f'{domain.upper()} Domain\nChunk Count: {len(domain_data)}', fontsize=14, fontweight='bold')
+    axes[i].set_title(f'{domain.upper()} Domain - Chunks: {len(domain_data)}', fontsize=14, fontweight='bold')
     axes[i].legend(fontsize=10)
     axes[i].grid(True, alpha=0.3)
 
@@ -193,11 +185,11 @@ plt.suptitle('Chunk Length Distribution by Domain', fontsize=20, fontweight='bol
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '02_chunk_length_by_domain.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 02_chunk_length_by_domain.png")
+print("  SUCCESS: Saved 02_chunk_length_by_domain.png")
 
 
 # ==================== Visualization 3: Cumulative Distribution ====================
-print("\n[6/8] Visualization 3: Cumulative Distribution of Chunk Lengths...")
+print("\n[6/8] Visualization 3: Cumulative Distribution...")
 
 fig, ax = plt.subplots(figsize=(16, 10))
 
@@ -211,15 +203,15 @@ ax.set_ylabel('Cumulative Percentage (%)', fontsize=14, fontweight='bold')
 ax.set_title('Cumulative Distribution of Chunk Lengths', fontsize=18, fontweight='bold', pad=20)
 ax.legend(fontsize=12, loc='lower right')
 ax.grid(True, alpha=0.3)
-ax.set_xlim(0, df_chunks['length'].quantile(0.99))  # Show up to 99th percentile
+ax.set_xlim(0, df_chunks['length'].quantile(0.99))
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '03_cumulative_distribution.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 03_cumulative_distribution.png")
+print("  SUCCESS: Saved 03_cumulative_distribution.png")
 
 
-# ==================== Visualization 4: Box Plot by Domain ====================
-print("\n[7/8] Visualization 4: Chunk Length Box Plot by Domain...")
+# ==================== Visualization 4: Box Plot ====================
+print("\n[7/8] Visualization 4: Box Plot by Domain...")
 
 fig, ax = plt.subplots(figsize=(16, 10))
 df_chunks.boxplot(column='length', by='domain', ax=ax, patch_artist=True,
@@ -232,16 +224,16 @@ df_chunks.boxplot(column='length', by='domain', ax=ax, patch_artist=True,
 ax.set_xlabel('Domain', fontsize=14, fontweight='bold')
 ax.set_ylabel('Chunk Length (characters)', fontsize=14, fontweight='bold')
 ax.set_title('Chunk Length Box Plot by Domain', fontsize=18, fontweight='bold', pad=20)
-plt.suptitle('')  # Remove default title
+plt.suptitle('')
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '04_boxplot_by_domain.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 04_boxplot_by_domain.png")
+print("  SUCCESS: Saved 04_boxplot_by_domain.png")
 
 
-# ==================== Visualization 5: Document/Chunk Distribution by Domain ====================
-print("\n[8/8] Visualization 5: Document/Chunk Distribution by Domain...")
+# ==================== Visualization 5: Domain Distribution ====================
+print("\n[8/8] Visualization 5: Document and Chunk Distribution...")
 
 fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
@@ -275,15 +267,15 @@ for ax in axes:
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '05_domain_distribution.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 05_domain_distribution.png")
+print("  SUCCESS: Saved 05_domain_distribution.png")
 
 
-# ==================== Visualization 6: Retrieval Efficiency Analysis ====================
-print("\n[Additional Analysis 1] Retrieval Efficiency Metrics...")
+# ==================== Additional Analysis 1: Retrieval Efficiency ====================
+print("\n[Additional 1] Retrieval Efficiency Analysis...")
 
 fig, axes = plt.subplots(1, 2, figsize=(20, 8))
 
-# Ideal chunk size distribution
+# Chunk size distribution
 categories = ['Too Small\n(<2000)', 'Ideal\n(2000-4000)', 'Too Large\n(>4000)']
 values = [
     research_analysis['retrieval_efficiency']['too_small_chunks'],
@@ -298,7 +290,7 @@ axes[0].pie(values, labels=categories, autopct='%1.1f%%', colors=colors_pie,
 axes[0].set_title('Chunk Size Distribution for Retrieval Efficiency',
                  fontsize=16, fontweight='bold', pad=15)
 
-# Average chunk length by domain
+# Average chunk length
 domain_avg_lengths = [df_chunks[df_chunks['domain'] == d]['length'].mean() for d in domains]
 axes[1].barh(range(len(domains)), domain_avg_lengths, color=colors, alpha=0.8, edgecolor='black', linewidth=2)
 axes[1].axvline(ideal_min, color='green', linestyle='--', linewidth=2, label='Ideal Min (2000)')
@@ -313,11 +305,11 @@ axes[1].grid(True, alpha=0.3, axis='x')
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '06_retrieval_efficiency.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 06_retrieval_efficiency.png")
+print("  SUCCESS: Saved 06_retrieval_efficiency.png")
 
 
-# ==================== Visualization 7: Vocabulary Diversity ====================
-print("\n[Additional Analysis 2] Vocabulary Diversity...")
+# ==================== Additional Analysis 2: Vocabulary Diversity ====================
+print("\n[Additional 2] Vocabulary Diversity Analysis...")
 
 fig, ax = plt.subplots(figsize=(16, 10))
 
@@ -327,11 +319,10 @@ bars = ax.bar(range(len(domains)), diversity_scores, color=colors, alpha=0.8, ed
 ax.set_xticks(range(len(domains)))
 ax.set_xticklabels([d.upper() for d in domains], fontsize=14, fontweight='bold')
 ax.set_ylabel('Vocabulary Diversity Score', fontsize=14, fontweight='bold')
-ax.set_title('Vocabulary Diversity by Domain\n(Unique Words / Total Words)',
+ax.set_title('Vocabulary Diversity by Domain (Unique Words / Total Words)',
             fontsize=18, fontweight='bold', pad=20)
 ax.grid(True, alpha=0.3, axis='y')
 
-# Display values
 for i, bar in enumerate(bars):
     height = bar.get_height()
     ax.text(bar.get_x() + bar.get_width()/2., height,
@@ -341,11 +332,11 @@ for i, bar in enumerate(bars):
 plt.tight_layout()
 plt.savefig(OUTPUT_DIR / '07_vocabulary_diversity.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 07_vocabulary_diversity.png")
+print("  SUCCESS: Saved 07_vocabulary_diversity.png")
 
 
-# ==================== Visualization 8: Comprehensive Dashboard ====================
-print("\n[Comprehensive Visualization] Creating comprehensive dashboard...")
+# ==================== Comprehensive Dashboard ====================
+print("\n[Comprehensive] Creating comprehensive dashboard...")
 
 fig = plt.figure(figsize=(24, 18))
 gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
@@ -363,12 +354,12 @@ ax1.grid(True, alpha=0.3)
 
 # 2. Domain Distribution
 ax2 = fig.add_subplot(gs[0, 2])
-chunk_counts = df_chunks['domain'].value_counts()
-ax2.pie(chunk_counts, labels=[d.upper() for d in chunk_counts.index], autopct='%1.1f%%',
-       colors=sns.color_palette("husl", len(chunk_counts)), startangle=90,
+chunk_counts_pie = df_chunks['domain'].value_counts()
+ax2.pie(chunk_counts_pie, labels=[d.upper() for d in chunk_counts_pie.index], autopct='%1.1f%%',
+       colors=sns.color_palette("husl", len(chunk_counts_pie)), startangle=90,
        textprops={'fontsize': 9, 'fontweight': 'bold'},
        wedgeprops={'linewidth': 1.5, 'edgecolor': 'white'})
-ax2.set_title('Chunk Distribution\nby Domain', fontsize=13, fontweight='bold')
+ax2.set_title('Chunk Distribution by Domain', fontsize=13, fontweight='bold')
 
 # 3. Box Plot
 ax3 = fig.add_subplot(gs[1, :])
@@ -399,27 +390,27 @@ ax4.set_xlim(0, df_chunks['length'].quantile(0.99))
 
 # 5. Retrieval Efficiency
 ax5 = fig.add_subplot(gs[2, 2])
-categories = ['Too\nSmall', 'Ideal', 'Too\nLarge']
-values_pie = [
+categories_dash = ['Too\nSmall', 'Ideal', 'Too\nLarge']
+values_pie_dash = [
     research_analysis['retrieval_efficiency']['too_small_chunks'],
     research_analysis['retrieval_efficiency']['ideal_chunk_ratio'],
     research_analysis['retrieval_efficiency']['too_large_chunks']
 ]
-ax5.pie(values_pie, labels=categories, autopct='%1.1f%%',
+ax5.pie(values_pie_dash, labels=categories_dash, autopct='%1.1f%%',
        colors=['#ff9999', '#90ee90', '#ffcc99'], startangle=90,
        textprops={'fontsize': 9, 'fontweight': 'bold'},
        wedgeprops={'linewidth': 1.5, 'edgecolor': 'white'})
-ax5.set_title('Retrieval Efficiency\n(Chunk Size)', fontsize=13, fontweight='bold')
+ax5.set_title('Retrieval Efficiency (Chunk Size)', fontsize=13, fontweight='bold')
 
 plt.suptitle('RAG Pipeline Comprehensive Analysis Dashboard',
             fontsize=20, fontweight='bold', y=0.98)
 plt.savefig(OUTPUT_DIR / '08_comprehensive_dashboard.png', dpi=300, bbox_inches='tight')
 plt.close()
-print("  ✓ Saved: 08_comprehensive_dashboard.png")
+print("  SUCCESS: Saved 08_comprehensive_dashboard.png")
 
 
-# ==================== Research-Level Statistics Report ====================
-print("\n[Statistical Report] Saving research-level analysis results...")
+# ==================== Generate Report ====================
+print("\n[Report] Generating analysis report...")
 
 report = f"""
 {'='*100}
@@ -505,18 +496,18 @@ report += f"""
 6. QUALITY ASSESSMENT & RECOMMENDATIONS
 {'='*100}
 
-   ✓ Document Coverage:
+   Document Coverage:
      - URL tagging coverage is {'EXCELLENT' if all(stats['domains'][d]['url_coverage'] > 95 for d in stats['domains']) else 'GOOD' if all(stats['domains'][d]['url_coverage'] > 80 for d in stats['domains']) else 'NEEDS IMPROVEMENT'}
      - All domains have proper source attribution
 
-   ✓ Chunk Distribution:
+   Chunk Distribution:
      - Coefficient of Variation (CV) analysis shows {'consistent' if all(v['cv'] < 1.0 for v in research_analysis['domain_coverage'].values()) else 'variable'} chunk sizes
      - {"Low CV indicates stable chunking strategy" if all(v['cv'] < 1.0 for v in research_analysis['domain_coverage'].values()) else "High CV may indicate diverse content types"}
 
-   ✓ Retrieval Optimization:
+   Retrieval Optimization:
      - {"Most chunks fall within ideal range - excellent for RAG performance" if research_analysis['retrieval_efficiency']['ideal_chunk_ratio'] > 70 else "Consider re-chunking strategy to improve retrieval efficiency"}
 
-   ⚠ Potential Improvements:
+   Potential Improvements:
      1. Monitor chunk size distribution for outliers (very long/short chunks)
      2. Ensure balanced representation across domains for fair retrieval
      3. Consider implementing semantic chunking for better context preservation
@@ -544,21 +535,21 @@ report += f"""
 8. DATASET READINESS CHECKLIST
 {'='*100}
 
-   ✓ Data Quality:
-     [{'✓' if stats['overall']['total_chunks'] > 1000 else '✗'}] Sufficient chunk count (>1,000)
-     [{'✓' if len(domains_data) >= 2 else '✗'}] Multiple domains represented
-     [{'✓' if research_analysis['retrieval_efficiency']['ideal_chunk_ratio'] > 50 else '✗'}] Adequate ideal chunk ratio (>50%)
+   Data Quality:
+     [{'OK' if stats['overall']['total_chunks'] > 1000 else 'NO'}] Sufficient chunk count (>1,000)
+     [{'OK' if len(domains_data) >= 2 else 'NO'}] Multiple domains represented
+     [{'OK' if research_analysis['retrieval_efficiency']['ideal_chunk_ratio'] > 50 else 'NO'}] Adequate ideal chunk ratio (>50%)
 
-   ✓ Coverage:
+   Coverage:
 """
 
 for domain in stats['domains']:
     url_cov = stats['domains'][domain]['url_coverage']
-    report += f"     [{'✓' if url_cov > 95 else '✗'}] {domain.upper()} URL coverage: {url_cov:.1f}%\n"
+    report += f"     [{'OK' if url_cov > 95 else 'NO'}] {domain.upper()} URL coverage: {url_cov:.1f}%\n"
 
 report += f"""
 
-   ✓ Recommendations for Production:
+   Recommendations for Production:
      1. Implement RAGAS evaluation pipeline for ongoing quality monitoring
      2. Set up A/B testing for chunk size optimization
      3. Monitor retrieval latency and accuracy metrics
@@ -571,16 +562,15 @@ Analysis Output Directory: {OUTPUT_DIR.absolute()}
 {'='*100}
 """
 
-# Save report
 with open(OUTPUT_DIR / 'analysis_report.txt', 'w', encoding='utf-8') as f:
     f.write(report)
 
 print(report)
-print(f"\n  ✓ Report saved: {OUTPUT_DIR / 'analysis_report.txt'}")
+print(f"\n  SUCCESS: Report saved to {OUTPUT_DIR / 'analysis_report.txt'}")
 
 
 # ==================== Save JSON Statistics ====================
-print("\n[Data Export] Creating JSON statistics file...")
+print("\n[JSON Export] Creating JSON statistics file...")
 
 json_stats = {
     'generated_at': pd.Timestamp.now().isoformat(),
@@ -607,7 +597,6 @@ json_stats = {
 
 # Convert numpy types to Python native types
 def convert_to_native_types(obj):
-    """Convert numpy types to Python native types"""
     if isinstance(obj, dict):
         return {k: convert_to_native_types(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -626,15 +615,15 @@ json_stats_native = convert_to_native_types(json_stats)
 with open(OUTPUT_DIR / 'statistics.json', 'w', encoding='utf-8') as f:
     json.dump(json_stats_native, f, ensure_ascii=False, indent=2)
 
-print(f"  ✓ JSON saved: {OUTPUT_DIR / 'statistics.json'}")
+print(f"  SUCCESS: JSON saved to {OUTPUT_DIR / 'statistics.json'}")
 
 
 # ==================== Completion ====================
 print("\n" + "="*100)
-print("Analysis Completed!")
+print("Analysis Completed Successfully!")
 print("="*100)
 print(f"\nGenerated Files:")
-print(f"  📊 Visualization files (8 files):")
+print(f"  Visualization files (8 files):")
 print(f"     - {OUTPUT_DIR / '01_overall_chunk_length_distribution.png'}")
 print(f"     - {OUTPUT_DIR / '02_chunk_length_by_domain.png'}")
 print(f"     - {OUTPUT_DIR / '03_cumulative_distribution.png'}")
@@ -643,7 +632,7 @@ print(f"     - {OUTPUT_DIR / '05_domain_distribution.png'}")
 print(f"     - {OUTPUT_DIR / '06_retrieval_efficiency.png'}")
 print(f"     - {OUTPUT_DIR / '07_vocabulary_diversity.png'}")
 print(f"     - {OUTPUT_DIR / '08_comprehensive_dashboard.png'}")
-print(f"\n  📄 Report files (2 files):")
+print(f"\n  Report files (2 files):")
 print(f"     - {OUTPUT_DIR / 'analysis_report.txt'}")
 print(f"     - {OUTPUT_DIR / 'statistics.json'}")
 print(f"\n{'='*100}\n")
