@@ -21,6 +21,9 @@ from .nodes import (
     hallucination_check_node,
     answer_grading_node,
     web_search_node,
+    load_user_context_node,
+    personalize_response_node,
+    suggest_related_questions_node,
 )
 from .state import RAGState
 
@@ -132,15 +135,18 @@ def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
 # ========== LangGraph 구성 함수 ==========
 
 
-def create_rag_graph() -> StateGraph:
+def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     """
     Adaptive RAG StateGraph 생성
+
+    Args:
+        enable_personalization: True면 개인화 및 질문 추천 노드 포함, False면 제외
     """
-    logger.info("Creating Adaptive RAG graph...")
+    logger.info(f"Creating Adaptive RAG graph (personalization={enable_personalization})...")
 
     workflow = StateGraph(RAGState)
 
-    # 노드 등록
+    # 기본 노드 등록
     workflow.add_node("intent_classifier", intent_classifier_node)
     workflow.add_node("query_router", query_router_node)
     workflow.add_node("hybrid_retrieve", hybrid_retrieve_node)
@@ -153,17 +159,35 @@ def create_rag_graph() -> StateGraph:
     workflow.add_node("answer_grading", answer_grading_node)
     workflow.add_node("web_search", web_search_node)
 
+    # 개인화 및 질문 추천 노드 등록 (enable_personalization=True일 때만)
+    if enable_personalization:
+        workflow.add_node("load_user_context", load_user_context_node)
+        workflow.add_node("personalize_response", personalize_response_node)
+        workflow.add_node("suggest_related_questions", suggest_related_questions_node)
+
     # 시작점: intent classifier
     workflow.set_entry_point("intent_classifier")
 
-    workflow.add_conditional_edges(
-        "intent_classifier",
-        decide_intent_path,
-        {
-            "proceed": "query_router",
-            "end": END,
-        },
-    )
+    # Intent → 다음 노드 (개인화 여부에 따라 분기)
+    if enable_personalization:
+        workflow.add_conditional_edges(
+            "intent_classifier",
+            decide_intent_path,
+            {
+                "proceed": "load_user_context",
+                "end": END,
+            },
+        )
+        workflow.add_edge("load_user_context", "query_router")
+    else:
+        workflow.add_conditional_edges(
+            "intent_classifier",
+            decide_intent_path,
+            {
+                "proceed": "query_router",
+                "end": END,
+            },
+        )
 
     # Query Router → Vectorstore / WebSearch / Direct
     workflow.add_conditional_edges(
@@ -198,8 +222,13 @@ def create_rag_graph() -> StateGraph:
     # Web Search → Generate
     workflow.add_edge("web_search", "generate")
 
-    # Generate → Hallucination Check
-    workflow.add_edge("generate", "hallucination_check")
+    # Generate → 다음 노드 (개인화 여부에 따라 분기)
+    if enable_personalization:
+        workflow.add_edge("generate", "personalize_response")
+        workflow.add_edge("personalize_response", "suggest_related_questions")
+        workflow.add_edge("suggest_related_questions", "hallucination_check")
+    else:
+        workflow.add_edge("generate", "hallucination_check")
 
     # Hallucination Check → Answer Grading / WebSearch / Retry Generate
     workflow.add_conditional_edges(
@@ -223,16 +252,29 @@ def create_rag_graph() -> StateGraph:
     )
 
     app = workflow.compile()
-    logger.info("✓ Adaptive RAG graph created successfully")
+    logger.info(f"✓ Adaptive RAG graph created successfully (personalization={enable_personalization})")
     return app
 
 
 # ========== 그래프 실행/시각화 ==========
 
 
-def run_rag_graph(question: str, config_path: str = None) -> dict:
+def run_rag_graph(
+    question: str,
+    config_path: str = None,
+    user_id: str = "",
+    user_context: dict = None,
+    enable_personalization: bool = True,
+) -> dict:
     """
     RAG 그래프 실행
+
+    Args:
+        question: 사용자 질문
+        config_path: 설정 파일 경로 (선택)
+        user_id: 사용자 식별자 (개인화에 사용, 선택)
+        user_context: 사용자 컨텍스트 (Django에서 전달, 선택)
+        enable_personalization: 개인화 및 질문 추천 기능 활성화 여부
     """
     from .state import create_initial_state
     from .config import get_config
@@ -242,11 +284,14 @@ def run_rag_graph(question: str, config_path: str = None) -> dict:
     else:
         _ = get_config()
 
-    initial_state = create_initial_state(question)
-    app = create_rag_graph()
+    initial_state = create_initial_state(question, user_id=user_id, user_context=user_context)
+    app = create_rag_graph(enable_personalization=enable_personalization)
 
     logger.info(f"\n{'=' * 80}")
     logger.info(f"질문: {question}")
+    logger.info(f"개인화: {enable_personalization}")
+    if user_id:
+        logger.info(f"사용자 ID: {user_id}")
     logger.info(f"{'=' * 80}\n")
 
     try:

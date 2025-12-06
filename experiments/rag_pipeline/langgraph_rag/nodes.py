@@ -15,6 +15,9 @@ LangGraph RAG 노드 함수
 - hallucination_check: 환각 검증
 - answer_grading: 답변 품질 평가
 - web_search: 웹 검색 fallback
+- load_user_context: 사용자 컨텍스트 로드 (개인화)
+- personalize_response: 답변 개인화
+- suggest_related_questions: 관련 질문 추천
 """
 
 import asyncio
@@ -25,10 +28,25 @@ from typing import Dict, List, Tuple
 
 import chromadb
 from FlagEmbedding import BGEM3FlagModel, FlagReranker
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI, OpenAI
 
 from .config import get_config
-from .state import RAGState, add_to_history
+from .state import (
+    RAGState,
+    add_to_history,
+    IntentClassification,
+    IntentType,
+    DocumentRelevance,
+    RelevanceType,
+    RewrittenQuery,
+    QueryRewriteAction,
+    HallucinationGrade,
+    HallucinationType,
+    UsefulnessGrade,
+    UsefulnessType,
+)
 from .tools import get_web_search_tool
 
 logger = logging.getLogger(__name__)
@@ -97,6 +115,16 @@ class RAGResources:
         # LLM 클라이언트 (동기/비동기)
         self.llm_client = OpenAI()
         self.async_llm_client = AsyncOpenAI()
+
+        # LangChain LLM 클라이언트 (structured output용)
+        self.langchain_llm = ChatOpenAI(
+            model=config.llm_model,
+            temperature=config.llm_temperature,
+        )
+        self.langchain_llm_fast = ChatOpenAI(
+            model=config.context_quality_model,
+            temperature=0,
+        )
 
         # 시스템 프롬프트
         system_prompt_path = config.artifacts_dir.parent / config.config["llm"]["system_prompt_path"]
@@ -948,3 +976,341 @@ def web_search_node(state):
     logger.info(f"[WebSearch] {len(documents)}개 결과 검색 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "web_search")
+
+
+# ========== 개인화 및 질문 추천 노드 ==========
+
+# ========== 노드 11: Load User Context (개인화) ==========
+
+def load_user_context_node(state: RAGState) -> RAGState:
+    """
+    사용자 컨텍스트 로드 (개인화 - 간소화 버전)
+
+    Django에서 전달받은 user_context를 기반으로 현재 질문과 관련된
+    사용자 학습 목표 및 관심사를 분석합니다.
+
+    Note: 멘토님의 원본과 다르게 DB 쿼리를 하지 않고,
+          Django에서 이미 전달받은 user_context를 사용합니다.
+
+    Args:
+        state (RAGState): 현재 상태
+
+    Returns:
+        RAGState: 개인화 컨텍스트가 추가된 상태
+    """
+    logger.info("[LoadUserContext] 사용자 컨텍스트 로드 시작")
+    start_time = time.time()
+
+    user_id = state.get("user_id", "")
+    user_context = state.get("user_context", {})
+    question = state["question"]
+
+    if not user_id or not user_context:
+        logger.info("[LoadUserContext] user_id 또는 user_context 없음, 개인화 스킵")
+        return add_to_history(state, "load_user_context")
+
+    try:
+        # Django에서 전달받은 user_context 사용
+        # user_context 구조: {
+        #     "learning_goals": "Python 마스터하기, Django 학습",
+        #     "interested_topics": "웹 개발, API 설계, 데이터베이스",
+        # }
+        learning_goals = user_context.get("learning_goals", "")
+        interested_topics = user_context.get("interested_topics", "")
+
+        if not learning_goals and not interested_topics:
+            logger.info("[LoadUserContext] 사용자 학습 데이터 없음")
+            return add_to_history(state, "load_user_context")
+
+        # 질문에서 키워드 추출
+        question_keywords = _extract_keywords(question)
+
+        # 관련 항목 찾기
+        related_items = []
+        forgotten_items = []
+
+        # learning_goals 분석
+        if learning_goals:
+            goals_list = [g.strip() for g in learning_goals.split(",")]
+            for goal in goals_list:
+                if _is_related_to_question(goal, question_keywords, question):
+                    related_items.append({
+                        "type": "learning_goal",
+                        "content": goal,
+                    })
+                    # 질문에 직접 언급되지 않은 경우 상기 후보
+                    if not _is_mentioned_in_question(goal, question):
+                        forgotten_items.append({
+                            "type": "learning_goal",
+                            "content": goal,
+                        })
+
+        # interested_topics 분석
+        if interested_topics:
+            topics_list = [t.strip() for t in interested_topics.split(",")]
+            for topic in topics_list:
+                if _is_related_to_question(topic, question_keywords, question):
+                    related_items.append({
+                        "type": "interested_topic",
+                        "content": topic,
+                    })
+                    # 질문에 직접 언급되지 않은 경우 상기 후보
+                    if not _is_mentioned_in_question(topic, question):
+                        forgotten_items.append({
+                            "type": "interested_topic",
+                            "content": topic,
+                        })
+
+        state["related_selections"] = related_items
+        state["forgotten_candidates"] = forgotten_items
+
+        logger.info(
+            f"[LoadUserContext] 로드 완료 - "
+            f"관련: {len(related_items)}, "
+            f"상기 후보: {len(forgotten_items)}"
+        )
+
+    except Exception as e:
+        logger.error(f"[LoadUserContext] 실패: {e}")
+        state["related_selections"] = []
+        state["forgotten_candidates"] = []
+
+    elapsed = time.time() - start_time
+    logger.info(f"[LoadUserContext] 완료 ({elapsed:.2f}s)")
+
+    return add_to_history(state, "load_user_context")
+
+
+def _extract_keywords(text: str) -> List[str]:
+    """
+    텍스트에서 키워드 추출
+
+    Args:
+        text: 입력 텍스트
+
+    Returns:
+        List[str]: 추출된 키워드 목록
+    """
+    # 간단한 키워드 추출 (공백 기준 분리 + 불용어 제거)
+    stopwords = {"은", "는", "이", "가", "을", "를", "의", "에", "에서", "으로", "로", "와", "과", "하고", "있", "없", "수", "더", "등"}
+
+    words = text.lower().replace("?", "").replace(".", "").split()
+    keywords = [w for w in words if len(w) > 1 and w not in stopwords]
+
+    return keywords
+
+
+def _is_related_to_question(item: str, keywords: List[str], question: str) -> bool:
+    """
+    항목이 질문과 관련 있는지 판단
+
+    Args:
+        item: 사용자 학습 목표 또는 관심사
+        keywords: 질문 키워드 목록
+        question: 원본 질문
+
+    Returns:
+        bool: 관련 여부
+    """
+    item_lower = item.lower()
+    question_lower = question.lower()
+
+    # 직접 언급된 경우
+    if item_lower in question_lower:
+        return True
+
+    # 키워드 중 하나라도 포함되면 관련 있음
+    for keyword in keywords:
+        if keyword in item_lower:
+            return True
+
+    return False
+
+
+def _is_mentioned_in_question(item: str, question: str) -> bool:
+    """
+    항목이 질문에 직접 언급되었는지 확인
+
+    Args:
+        item: 사용자 학습 목표 또는 관심사
+        question: 원본 질문
+
+    Returns:
+        bool: 언급 여부
+    """
+    item_lower = item.lower()
+    question_lower = question.lower()
+
+    return item_lower in question_lower
+
+
+# ========== 노드 12: Personalize Response (개인화) ==========
+
+def personalize_response_node(state: RAGState) -> RAGState:
+    """
+    답변 개인화 (상기 메시지 주입)
+
+    생성된 답변에 사용자가 잊었을 수 있는 과거 학습 목표나 관심사를
+    상기시키는 메시지를 자연스럽게 추가합니다.
+
+    Args:
+        state (RAGState): 현재 상태
+
+    Returns:
+        RAGState: 개인화된 답변이 포함된 상태
+    """
+    logger.info("[PersonalizeResponse] 답변 개인화 시작")
+    start_time = time.time()
+
+    generation = state["generation"]
+    forgotten_candidates = state.get("forgotten_candidates", [])
+
+    if not forgotten_candidates:
+        logger.info("[PersonalizeResponse] 상기할 내용 없음, 스킵")
+        state["reminder_added"] = False
+        return add_to_history(state, "personalize_response")
+
+    try:
+        # 상기 메시지 생성 (최대 2개 항목만)
+        reminder_items = forgotten_candidates[:2]
+        reminder_parts = []
+
+        for item in reminder_items:
+            item_type = item.get("type", "")
+            content = item.get("content", "")
+
+            if content:
+                if item_type == "learning_goal":
+                    reminder_parts.append(f"'{content}' 학습 목표")
+                else:
+                    reminder_parts.append(f"'{content}'")
+
+        if reminder_parts:
+            # 자연스러운 상기 메시지 구성
+            if len(reminder_parts) == 1:
+                items_text = reminder_parts[0]
+            else:
+                items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
+
+            reminder_message = (
+                f"\n\n💡 **참고**: 이전에 관심을 보이셨던 {items_text}도 "
+                f"함께 확인해보시면 도움이 될 수 있습니다."
+            )
+
+            # 출처 섹션 앞에 삽입
+            if "📚 참고:" in generation:
+                parts = generation.split("📚 참고:")
+                personalized_generation = parts[0].rstrip() + reminder_message + "\n\n📚 참고:" + parts[1]
+            else:
+                personalized_generation = generation + reminder_message
+
+            state["generation"] = personalized_generation
+            state["reminder_added"] = True
+
+            logger.info(f"[PersonalizeResponse] 상기 메시지 추가: {items_text}")
+        else:
+            state["reminder_added"] = False
+
+    except Exception as e:
+        logger.error(f"[PersonalizeResponse] 실패: {e}")
+        state["reminder_added"] = False
+
+    elapsed = time.time() - start_time
+    logger.info(f"[PersonalizeResponse] 완료 ({elapsed:.2f}s)")
+
+    return add_to_history(state, "personalize_response")
+
+
+# ========== 노드 13: Suggest Related Questions ==========
+
+def suggest_related_questions_node(state: RAGState) -> RAGState:
+    """
+    관련 질문 추천
+
+    현재 질문과 답변, 그리고 사용자 컨텍스트를 바탕으로
+    사용자가 다음에 할 수 있는 관련 질문 3개를 추천합니다.
+
+    Args:
+        state (RAGState): 현재 상태
+
+    Returns:
+        RAGState: 관련 질문 목록이 포함된 상태
+    """
+    logger.info("[SuggestQuestions] 관련 질문 추천 시작")
+    start_time = time.time()
+
+    resources = get_resources()
+
+    question = state["question"]
+    generation = state["generation"]
+    user_context = state.get("user_context", {})
+
+    # 사용자 컨텍스트 요약
+    context_summary = ""
+    if user_context:
+        learning_goals = user_context.get("learning_goals", "")
+        interested_topics = user_context.get("interested_topics", "")
+        if learning_goals:
+            context_summary += f"학습 목표: {learning_goals}\n"
+        if interested_topics:
+            context_summary += f"관심 주제: {interested_topics}\n"
+
+    # 답변에서 출처 제거
+    answer_only = _strip_existing_sources(generation)
+    if len(answer_only) > 500:
+        answer_only = answer_only[:500] + "..."
+
+    system_prompt = """당신은 학습 도우미입니다. 사용자의 현재 질문과 답변을 보고,
+자연스럽게 이어질 수 있는 관련 질문 3개를 추천하세요.
+
+추천 질문은:
+- 현재 질문에서 자연스럽게 파생되는 내용
+- 더 깊이 있는 이해를 돕는 내용
+- 실용적이고 구체적인 내용
+- 사용자의 학습 목표/관심사와 관련된 내용
+
+각 질문은 한 줄로 작성하고, 번호나 불릿 없이 줄바꿈으로만 구분하세요."""
+
+    user_prompt = f"""현재 질문: {question}
+
+답변 요약: {answer_only}"""
+
+    if context_summary:
+        user_prompt += f"\n\n사용자 정보:\n{context_summary}"
+
+    user_prompt += "\n\n관련 질문 3개를 추천해주세요 (각 질문을 줄바꿈으로 구분):"
+
+    try:
+        response = resources.llm_client.chat.completions.create(
+            model=resources.langchain_llm_fast.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=200,
+        )
+
+        suggestions_text = response.choices[0].message.content.strip()
+
+        # 줄바꿈으로 분리하고 정리
+        suggestions = [
+            line.strip().lstrip("0123456789.-) ").strip()
+            for line in suggestions_text.split("\n")
+            if line.strip() and len(line.strip()) > 10
+        ]
+
+        # 최대 3개만
+        suggestions = suggestions[:3]
+
+        state["related_questions"] = suggestions
+        logger.info(f"[SuggestQuestions] {len(suggestions)}개 질문 추천 완료")
+
+    except Exception as e:
+        logger.error(f"[SuggestQuestions] 실패: {e}")
+        state["related_questions"] = []
+
+    elapsed = time.time() - start_time
+    logger.info(f"[SuggestQuestions] 완료 ({elapsed:.2f}s)")
+
+    return add_to_history(state, "suggest_related_questions")

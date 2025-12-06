@@ -4,8 +4,80 @@ LangGraph RAG State definition.
 This module defines the shared state passed between LangGraph nodes.
 """
 
+from enum import Enum
 from typing import List, Dict, Any, TypedDict, Literal
 
+from pydantic import BaseModel, Field
+
+
+# ========== Pydantic Models (for Structured Output) ==========
+
+class IntentType(str, Enum):
+    """Question intent classification"""
+    IN_SCOPE = "in_scope"
+    GREETING = "greeting"
+    CHITCHAT = "chitchat"
+    NONSENSICAL = "nonsensical"
+
+
+class IntentClassification(BaseModel):
+    """Intent classification result"""
+    reasoning: str = Field(description="Classification reasoning (1-2 sentences)")
+    intent: IntentType = Field(description="Classified intent")
+
+
+class RelevanceType(str, Enum):
+    """Document relevance evaluation"""
+    RELEVANT = "relevant"
+    PARTIAL = "partial"
+    IRRELEVANT = "irrelevant"
+
+
+class DocumentRelevance(BaseModel):
+    """Single document relevance evaluation result"""
+    reasoning: str = Field(description="Evaluation reasoning")
+    relevance: RelevanceType = Field(description="Relevance evaluation")
+
+
+class QueryRewriteAction(str, Enum):
+    """Query rewrite action"""
+    PRESERVE = "preserve"
+    REWRITE = "rewrite"
+
+
+class RewrittenQuery(BaseModel):
+    """Query rewrite result"""
+    reasoning: str = Field(description="Rewrite reasoning")
+    action: QueryRewriteAction = Field(description="Whether to rewrite")
+    rewritten_query: str = Field(description="Rewritten query (used only when action is rewrite)")
+
+
+class HallucinationType(str, Enum):
+    """Hallucination evaluation"""
+    SUPPORTED = "supported"
+    NOT_SUPPORTED = "not_supported"
+    NOT_SURE = "not_sure"
+
+
+class HallucinationGrade(BaseModel):
+    """Hallucination verification result"""
+    reasoning: str = Field(description="Judgment reasoning")
+    grade: HallucinationType = Field(description="Hallucination status")
+
+
+class UsefulnessType(str, Enum):
+    """Answer usefulness evaluation"""
+    USEFUL = "useful"
+    NOT_USEFUL = "not_useful"
+
+
+class UsefulnessGrade(BaseModel):
+    """Answer usefulness evaluation result"""
+    reasoning: str = Field(description="Evaluation reasoning")
+    grade: UsefulnessType = Field(description="Usefulness evaluation")
+
+
+# ========== RAG State Definition ==========
 
 class RAGState(TypedDict):
     """
@@ -29,6 +101,16 @@ class RAGState(TypedDict):
         answer_usefulness (str): 답변 유용성 평가 ("useful" | "not_useful" | "unknown")
         transformed_query (str): 변환된 쿼리
         workflow_history (List[str]): 실행된 노드 기록
+
+        # Personalization fields
+        user_id (str): 사용자 식별자
+        user_context (Dict[str, Any]): 사용자 컨텍스트 (Django에서 전달)
+        related_selections (List[Dict[str, Any]]): 현재 질문과 관련된 선택 항목
+        forgotten_candidates (List[Dict[str, Any]]): 사용자가 잊었을 가능성 있는 항목
+        reminder_added (bool): 상기 메시지 추가 여부
+
+        # Question suggestion field
+        related_questions (List[str]): 관련 질문 추천 리스트
     """
 
     # 입력
@@ -64,10 +146,25 @@ class RAGState(TypedDict):
     transformed_query: str
     workflow_history: List[str]
 
+    # Personalization fields
+    user_id: str
+    user_context: Dict[str, Any]
+    related_selections: List[Dict[str, Any]]
+    forgotten_candidates: List[Dict[str, Any]]
+    reminder_added: bool
 
-def create_initial_state(question: str) -> RAGState:
+    # Question suggestion field
+    related_questions: List[str]
+
+
+def create_initial_state(question: str, user_id: str = "", user_context: Dict[str, Any] = None) -> RAGState:
     """
     Initialize the RAG state.
+
+    Args:
+        question: User question
+        user_id: User identifier (for personalization)
+        user_context: User context from Django (learning_goals, interested_topics, etc.)
     """
     return {
         "question": question,
@@ -87,6 +184,14 @@ def create_initial_state(question: str) -> RAGState:
         "answer_usefulness": "unknown",
         "transformed_query": "",
         "workflow_history": [],
+        # Personalization initial values
+        "user_id": user_id,
+        "user_context": user_context or {},
+        "related_selections": [],
+        "forgotten_candidates": [],
+        "reminder_added": False,
+        # Question suggestion initial value
+        "related_questions": [],
     }
 
 
