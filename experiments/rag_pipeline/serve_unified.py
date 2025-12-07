@@ -73,22 +73,25 @@ class ChatRequest(BaseModel):
     """Chat request from EC2 server"""
     question: str = Field(..., min_length=1, description="User question")
     user_id: str = Field(..., description="User ID from Django")
-    chat_history: List[ChatMessage] = Field(default=[], description="Previous conversation history")
+    user_context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="User personalization context")
+    enable_personalization: bool = Field(default=True, description="Enable personalization features")
+    chat_history: List[ChatMessage] = Field(default_factory=list, description="Previous conversation history")
     session_id: Optional[str] = Field(None, description="Chat session ID")
 
 
 class Source(BaseModel):
-    """Document source with metadata"""
-    content: str = Field(..., description="Document content")
-    url: Optional[str] = Field(None, description="Source URL")
-    score: Optional[float] = Field(None, description="Relevance score")
+    """Document source with metadata (Django compatible)"""
+    url: str = Field(..., description="Source URL")
+    title: str = Field(..., description="Document title")
+    domain: str = Field(default="unknown", description="Domain (python, git, general)")
 
 
 class ChatResponse(BaseModel):
     """Chat response to EC2 server"""
     success: bool = Field(..., description="Success status")
     answer: str = Field(..., description="Generated answer")
-    sources: List[Source] = Field(default=[], description="Retrieved documents")
+    sources: List[Source] = Field(default_factory=list, description="Retrieved documents")
+    related_questions: List[str] = Field(default_factory=list, description="Suggested follow-up questions")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
     error: Optional[str] = Field(None, description="Error message if failed")
 
@@ -131,21 +134,40 @@ def load_langgraph_rag(config_path: str):
     # Initialize config first
     _ = get_config(config_path)
 
-    # Create graph
-    graph = create_rag_graph()
+    # Create graphs (personalized + plain)
+    graphs = {
+        "personalized": create_rag_graph(enable_personalization=True),
+        "plain": create_rag_graph(enable_personalization=False),
+    }
 
     load_time = time.time() - start_time
-    logger.info(f"LangGraph RAG loaded in {load_time:.2f}s")
+    logger.info(f"LangGraph RAG loaded in {load_time:.2f}s (personalized + plain)")
 
-    return graph
+    return graphs
 
 
 # === Chat Processing ===
 
+
+def extract_title_from_url(url: str) -> str:
+    """Extract human-friendly title from a URL (filename without extension)."""
+    if not url or url == "unknown":
+        return "Unknown Document"
+
+    filename = url.split("/")[-1]
+    if "." in filename:
+        filename = filename.rsplit(".", 1)[0]
+
+    title = filename.replace("-", " ").replace("_", " ")
+    return title.title() if title else "Unknown Document"
+
+
 def process_optimized_rag(
     question: str,
     chat_history: List[ChatMessage],
-    user_id: str
+    user_id: str,
+    enable_personalization: bool = False,
+    session_id: Optional[str] = None,
 ) -> ChatResponse:
     """Process request with Optimized RAG"""
     global rag_instance
@@ -154,7 +176,7 @@ def process_optimized_rag(
         start_time = time.time()
 
         # Retrieve contexts
-        logger.info(f"[Optimized RAG] Retrieving contexts for: {question[:50]}...")
+        logger.info(f"[Optimized RAG] Retrieving contexts for: {question[:50]}... (session={session_id})")
         contexts = rag_instance.retrieve(question)
 
         if not contexts:
@@ -209,10 +231,13 @@ def process_optimized_rag(
             if hasattr(rag_instance.retriever, 'get_document_url'):
                 source_url = rag_instance.retriever.get_document_url(ctx)
 
+            url = source_url or "unknown"
+            title = extract_title_from_url(url) if source_url else f"Document {i + 1}"
+
             sources.append(Source(
-                content=ctx[:200] + "..." if len(ctx) > 200 else ctx,
-                url=source_url,
-                score=None
+                url=url,
+                title=title,
+                domain="unknown"
             ))
 
         total_time = time.time() - start_time
@@ -224,7 +249,10 @@ def process_optimized_rag(
             metadata={
                 "rag_type": "optimized",
                 "num_contexts": len(contexts),
-                "response_time": round(total_time, 2)
+                "response_time": round(total_time, 2),
+                "session_id": session_id,
+                "chat_history_length": len(chat_history) if chat_history else 0,
+                "enable_personalization": enable_personalization,
             }
         )
 
@@ -241,7 +269,10 @@ def process_optimized_rag(
 def process_langgraph_rag(
     question: str,
     chat_history: List[ChatMessage],
-    user_id: str
+    user_id: str,
+    user_context: Dict[str, Any] = None,
+    enable_personalization: bool = True,
+    session_id: Optional[str] = None,
 ) -> ChatResponse:
     """Process request with LangGraph RAG"""
     global rag_instance
@@ -250,13 +281,36 @@ def process_langgraph_rag(
         start_time = time.time()
 
         logger.info(f"[LangGraph RAG] Processing: {question[:50]}...")
+        logger.info(f"[LangGraph RAG] User ID: {user_id}, Personalization: {enable_personalization}, Session: {session_id}")
 
-        # Create initial state
+        # Create initial state with personalization
         from langgraph_rag.state import create_initial_state
-        initial_state = create_initial_state(question)
+        initial_state = create_initial_state(
+            question=question,
+            user_id=user_id,
+            user_context=user_context or {}
+        )
 
-        # Run LangGraph
-        result = rag_instance.invoke(initial_state)
+        # Attach session/chat metadata for downstream nodes or logging (best-effort)
+        if session_id:
+            initial_state["session_id"] = session_id
+        if chat_history:
+            initial_state["chat_history"] = [msg.model_dump() for msg in chat_history]
+
+        # Select graph based on personalization flag (preloaded at startup)
+        graph = None
+        if isinstance(rag_instance, dict):
+            graph = rag_instance.get("personalized") if enable_personalization else rag_instance.get("plain")
+            if graph is None:
+                graph = rag_instance.get("personalized") or rag_instance.get("plain")
+        else:
+            graph = rag_instance
+
+        if graph is None:
+            raise ValueError("LangGraph instance not initialized")
+
+        # Run LangGraph with personalization control
+        result = graph.invoke(initial_state)
 
         answer = result.get("generation", "답변 생성에 실패했습니다.")
 
@@ -273,21 +327,21 @@ def process_langgraph_rag(
             final_documents = result.get("documents", [])
             final_metadatas = result.get("metadatas", [])
 
-        # Build sources
+        # Build sources (Django compatible format)
         sources = []
-        for i, doc in enumerate(final_documents[:10]):  # Top 10
+        for i, _ in enumerate(final_documents[:10]):  # Top 10
             # Get metadata if available
             metadata = final_metadatas[i] if i < len(final_metadatas) else {}
-            url = metadata.get('source') or metadata.get('url')
+            url = metadata.get("url") or metadata.get("source") or metadata.get("link") or "unknown"
+            domain = metadata.get("domain") or metadata.get("source_type") or "unknown"
+            title = metadata.get("title") or (
+                extract_title_from_url(url) if url != "unknown" else f"Document {i + 1}"
+            )
 
-            # Document content is already a string in LangGraph
-            content = doc if isinstance(doc, str) else str(doc)
+            sources.append(Source(url=url, title=title, domain=domain))
 
-            sources.append(Source(
-                content=content[:200] + "..." if len(content) > 200 else content,
-                url=url,
-                score=None
-            ))
+        # Get related questions
+        related_questions = result.get("related_questions", [])
 
         total_time = time.time() - start_time
 
@@ -295,16 +349,28 @@ def process_langgraph_rag(
             success=True,
             answer=answer,
             sources=sources,
+            related_questions=related_questions,
             metadata={
                 "rag_type": "langgraph",
                 "workflow": result.get("workflow_history", []),
+                "intent": result.get("intent", "unknown"),
+                "route": result.get("route", "unknown"),
                 "document_relevance": result.get("document_relevance"),
                 "hallucination_grade": result.get("hallucination_grade"),
                 "answer_usefulness": result.get("answer_usefulness"),
                 "retry_count": result.get("retry_count", 0),
-                "response_time": round(total_time, 2)
+                "document_count": len(final_documents),
+                "personalization": {
+                    "reminder_added": result.get("reminder_added", False),
+                    "related_items": len(result.get("related_selections", [])),
+                },
+                "response_time": round(total_time, 2),
+                "session_id": session_id,
+                "chat_history_length": len(chat_history) if chat_history else 0,
+                "enable_personalization": enable_personalization,
             }
         )
+
 
     except Exception as e:
         logger.exception(f"[LangGraph RAG] Error: {e}")
@@ -407,13 +473,18 @@ def chat(request: ChatRequest):
             response = process_optimized_rag(
                 request.question,
                 request.chat_history,
-                request.user_id
+                request.user_id,
+                enable_personalization=request.enable_personalization,
+                session_id=request.session_id,
             )
         elif rag_type == "langgraph":
             response = process_langgraph_rag(
                 request.question,
                 request.chat_history,
-                request.user_id
+                request.user_id,
+                user_context=request.user_context,
+                enable_personalization=request.enable_personalization,
+                session_id=request.session_id,
             )
         else:
             raise ValueError(f"Unknown RAG type: {rag_type}")

@@ -63,6 +63,7 @@ class HallucinationGrade(BaseModel):
     """Hallucination verification result"""
     reasoning: str = Field(description="Judgment reasoning")
     grade: HallucinationType = Field(description="Hallucination status")
+    confidence: float = Field(description="Confidence score (0.0-1.0)", ge=0.0, le=1.0)
 
 
 class UsefulnessType(str, Enum):
@@ -156,6 +157,9 @@ class RAGState(TypedDict):
     # Question suggestion field
     related_questions: List[str]
 
+    # Chat history
+    chat_history: List[Dict[str, Any]]
+
 
 def create_initial_state(question: str, user_id: str = "", user_context: Dict[str, Any] = None) -> RAGState:
     """
@@ -192,6 +196,8 @@ def create_initial_state(question: str, user_id: str = "", user_context: Dict[st
         "reminder_added": False,
         # Question suggestion initial value
         "related_questions": [],
+        # Chat history (optional, filled by caller)
+        "chat_history": [],
     }
 
 

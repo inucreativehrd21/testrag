@@ -730,8 +730,8 @@ def transform_query_node(state):
 # ========== 노드 7: Generate ==========
 
 def generate_node(state):
-    """답변 생성 (LLM)"""
-    logger.info("[Generate] 답변 생성 시작")
+    """Generate answer with LLM (final step)."""
+    logger.info("[Generate] Start generation")
     start_time = time.time()
 
     resources = get_resources()
@@ -742,22 +742,35 @@ def generate_node(state):
     metadatas = state["final_metadatas"]
 
     if not documents:
-        logger.warning("[Generate] 문서 없음")
-        state["generation"] = "관련 문서를 찾지 못했습니다. 질문을 다르게 표현해보시겠어요?"
+        logger.warning("[Generate] No documents; returning fallback message")
+        state["generation"] = "?? ??? ?? ?????. ??? ?? ? ????? ?????."
         return add_to_history(state, "generate")
 
-    # 컨텍스트 포맷팅
+    # Context block
     context_block = "\n\n".join(
-        f"[문서 {i+1}] {meta.get('domain', 'unknown')}\n{doc}"
+        f"[?? {i+1}] {meta.get('domain', 'unknown')}\n{doc}"
         for i, (doc, meta) in enumerate(zip(documents, metadatas))
     )
 
-    # LLM 호출
+    # Recent chat history (best-effort, short)
+    history = state.get("chat_history", [])
+    history_text = ""
+    if history:
+        recent = history[-6:]
+        history_lines = [
+            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}" for msg in recent
+        ]
+        history_text = "[Recent chat]\n" + "\n".join(history_lines) + "\n\n"
+
     messages = [
         {"role": "system", "content": resources.system_prompt},
         {
             "role": "user",
-            "content": f"질문: {question}\n\n컨텍스트:\n{context_block}\n\n규칙: 본문에 툴/출처명(tavily, websearch 등)을 넣지 말고, 출처는 마지막 '📚 참고' 섹션에만 표기하세요.",
+            "content": (
+                f"??: {question}\n\n"
+                f"{history_text}????:\n{context_block}\n\n"
+                "??: ???? ??? ??? ????, ?? ??? '?? Reference' ???? ?? ???."
+            ),
         },
     ]
 
@@ -771,10 +784,10 @@ def generate_node(state):
         )
         answer_text = response.choices[0].message.content
 
-        # 기존 출처 제거 및 툴명 정리
+        # Strip prior reference sections and tool mentions
         answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
 
-        # URL 출처 추가
+        # URL extraction for references
         source_urls = []
         for meta in metadatas:
             url = meta.get("url", "unknown")
@@ -782,7 +795,7 @@ def generate_node(state):
                 source_urls.append(url)
 
         if source_urls:
-            sources_section = "\n\n📚 참고:\n" + "\n".join(
+            sources_section = "\n\n?? Reference:\n" + "\n".join(
                 f"- {url}" for url in source_urls
             )
             answer = answer_text + sources_section
@@ -790,17 +803,16 @@ def generate_node(state):
             answer = answer_text
 
         state["generation"] = answer
-        logger.info("[Generate] 답변 생성 완료")
+        logger.info("[Generate] Generation done")
 
     except Exception as e:
-        logger.error(f"[Generate] 실패: {e}")
-        state["generation"] = "답변 생성 중 오류가 발생했습니다."
+        logger.error(f"[Generate] Error: {e}")
+        state["generation"] = "?? ??? ??? ??????."
 
     elapsed = time.time() - start_time
-    logger.info(f"[Generate] 완료 ({elapsed:.2f}s)")
+    logger.info(f"[Generate] Done ({elapsed:.2f}s)")
 
     return add_to_history(state, "generate")
-
 
 def _strip_existing_sources(answer_text: str) -> str:
     """기존 출처 섹션 제거"""
@@ -822,15 +834,22 @@ def _clean_tool_mentions(answer_text: str) -> str:
     return cleaned.strip()
 
 
-# ========== 노드 8: Hallucination Check ==========
+# ========== 노드 8: Hallucination Check (개선 버전) ==========
 
 def hallucination_check_node(state):
-    """환각 검증 (Self-RAG)"""
-    logger.info("[HallucinationCheck] 환각 검증 시작")
+    """
+    환각 검증 (Self-RAG with confidence scoring)
+
+    개선사항:
+    1. Structured output (Pydantic) - 파싱 오류 제거
+    2. Confidence score - 신뢰도 측정
+    3. Keyword overlap validation - LLM 과신 방지
+    4. 토큰 기반 truncation - 근거 누락 방지
+    """
+    logger.info("[HallucinationCheck] 환각 검증 시작 (개선 버전)")
     start_time = time.time()
 
     resources = get_resources()
-    config = get_config()
 
     generation = state["generation"]
     documents = state["final_documents"]
@@ -843,55 +862,152 @@ def hallucination_check_node(state):
     # 출처 제거한 답변만 검증
     answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
-    # 컨텍스트 요약 (너무 길면 truncate)
-    context_preview = "\n\n".join(documents[:3])
-    if len(context_preview) > 2000:
-        context_preview = context_preview[:2000] + "..."
+    # Step 1: 간단한 keyword overlap 사전 검증
+    keyword_overlap = _calculate_keyword_overlap(answer_only, documents)
 
-    prompt = f"""다음 답변이 제공된 문서에 근거하는지 판단하세요.
+    # 명백한 환각 (keyword overlap이 너무 낮음)
+    if keyword_overlap < 0.15:
+        logger.warning(f"[HallucinationCheck] Keyword overlap 매우 낮음 ({keyword_overlap:.2%}) → NOT_SUPPORTED")
+        state["hallucination_grade"] = "not_supported"
+        state["web_search_needed"] = True
+        return add_to_history(state, "hallucination_check")
 
-답변:
+    # Step 2: 토큰 기반 문서 truncation (더 많은 문서 포함)
+    context_text = _smart_truncate_documents(documents, max_tokens=3000)
+
+    # Step 3: LLM structured output으로 검증
+    system_prompt = """You are a fact-checker. Evaluate if the answer is fully grounded in the provided documents.
+
+Provide:
+1. reasoning: Your judgment reasoning (2-3 sentences)
+2. grade: SUPPORTED / NOT_SUPPORTED / NOT_SURE
+3. confidence: Your confidence score (0.0 to 1.0)
+
+Be strict: if ANY claim lacks evidence, mark as NOT_SUPPORTED."""
+
+    user_prompt = f"""Answer:
 {answer_only}
 
-제공된 문서:
-{context_preview}
+Documents:
+{context_text}
 
-답변의 모든 주장이 문서에서 확인됩니까?
-
-- SUPPORTED: 답변의 모든 내용이 문서에 근거함
-- NOT_SUPPORTED: 문서에 없는 내용이 포함됨
-- NOT_SURE: 판단하기 어려움
-
-단어 하나만 답변하세요 (SUPPORTED, NOT_SUPPORTED, NOT_SURE):"""
+Is the answer fully supported by the documents?"""
 
     try:
-        response = resources.llm_client.chat.completions.create(
-            model=config.context_quality_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=20,
-        )
-        label = response.choices[0].message.content.strip().upper()
+        structured_llm = resources.langchain_llm_fast.with_structured_output(HallucinationGrade)
 
-        if "SUPPORTED" in label and "NOT" not in label:
-            state["hallucination_grade"] = "supported"
-            logger.info("[HallucinationCheck] 결과: SUPPORTED (문서에 근거함)")
-        elif "NOT_SUPPORTED" in label:
-            state["hallucination_grade"] = "not_supported"
-            logger.warning("[HallucinationCheck] 결과: NOT SUPPORTED (환각 발견)")
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+
+        result: HallucinationGrade = structured_llm.invoke(messages)
+
+        # Step 4: Confidence calibration (LLM confidence + keyword overlap)
+        # LLM이 과신하는 경향을 keyword overlap로 보정
+        calibrated_confidence = result.confidence * 0.7 + keyword_overlap * 0.3
+
+        # Low confidence warning
+        if calibrated_confidence < 0.65 and result.grade.value == "supported":
+            logger.warning(
+                f"[HallucinationCheck] Low confidence ({calibrated_confidence:.2f}), "
+                f"keyword_overlap={keyword_overlap:.2%}"
+            )
+            # Confidence가 낮으면 NOT_SURE로 변경
+            if calibrated_confidence < 0.50:
+                result.grade = HallucinationType.NOT_SURE
+
+        # State update
+        state["hallucination_grade"] = result.grade.value
+
+        if result.grade.value == "not_supported":
             state["web_search_needed"] = True
-        else:
-            state["hallucination_grade"] = "not_sure"
-            logger.info("[HallucinationCheck] 결과: NOT SURE")
+
+        logger.info(
+            f"[HallucinationCheck] Grade={result.grade.value}, "
+            f"LLM_Conf={result.confidence:.2f}, "
+            f"Calibrated={calibrated_confidence:.2f}, "
+            f"Keyword_Overlap={keyword_overlap:.2%}"
+        )
+        logger.info(f"[HallucinationCheck] Reasoning: {result.reasoning}")
 
     except Exception as e:
-        logger.error(f"[HallucinationCheck] 실패: {e}")
+        logger.error(f"[HallucinationCheck] 실패: {e}", exc_info=True)
         state["hallucination_grade"] = "not_sure"
 
     elapsed = time.time() - start_time
     logger.info(f"[HallucinationCheck] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "hallucination_check")
+
+
+def _calculate_keyword_overlap(answer: str, documents: List[str]) -> float:
+    """
+    간단한 keyword overlap 계산 (답변과 문서 간의 어휘 중복도)
+
+    Returns:
+        float: Overlap ratio (0.0 ~ 1.0)
+    """
+    import re
+
+    # 답변에서 키워드 추출 (2글자 이상, 알파벳/한글)
+    answer_words = set(re.findall(r'[a-zA-Z가-힣]{2,}', answer.lower()))
+
+    if not answer_words:
+        return 0.0
+
+    # 문서에서 키워드 추출
+    doc_text = " ".join(documents).lower()
+    doc_words = set(re.findall(r'[a-zA-Z가-힣]{2,}', doc_text))
+
+    # Overlap 계산
+    matching_words = answer_words.intersection(doc_words)
+    overlap_ratio = len(matching_words) / len(answer_words)
+
+    return overlap_ratio
+
+
+def _smart_truncate_documents(documents: List[str], max_tokens: int = 3000) -> str:
+    """
+    토큰 수 기반으로 문서를 스마트하게 truncate
+
+    Args:
+        documents: 문서 리스트
+        max_tokens: 최대 토큰 수
+
+    Returns:
+        str: Truncated된 문서 텍스트
+    """
+    try:
+        import tiktoken
+        enc = tiktoken.encoding_for_model("gpt-4o-mini")
+    except:
+        # tiktoken 없으면 문자 수 기반 fallback (대략 1 token = 4 chars)
+        max_chars = max_tokens * 4
+        combined = "\n\n".join(f"[Doc {i+1}]\n{doc}" for i, doc in enumerate(documents))
+        if len(combined) > max_chars:
+            return combined[:max_chars] + "\n... [truncated]"
+        return combined
+
+    result = []
+    total_tokens = 0
+
+    for i, doc in enumerate(documents):
+        doc_with_header = f"[Doc {i+1}]\n{doc}"
+        doc_tokens = len(enc.encode(doc_with_header))
+
+        if total_tokens + doc_tokens <= max_tokens:
+            result.append(doc_with_header)
+            total_tokens += doc_tokens
+        else:
+            # 남은 토큰으로 일부만 포함
+            remaining_tokens = max_tokens - total_tokens
+            if remaining_tokens > 50:  # 최소 50 토큰은 있어야 의미 있음
+                truncated_doc = enc.decode(enc.encode(doc)[:remaining_tokens])
+                result.append(f"[Doc {i+1}]\n{truncated_doc}... [truncated]")
+            break
+
+    return "\n\n".join(result)
 
 
 # ========== 노드 9: Answer Grading ==========
