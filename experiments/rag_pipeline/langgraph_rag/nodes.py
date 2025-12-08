@@ -219,44 +219,50 @@ def intent_classifier_node(state: RAGState) -> RAGState:
 
 
 
+# ========== ?? 1: Query Router ==========
+
+
+
+
+
+
 def query_router_node(state: RAGState) -> RAGState:
     """
-    ->-> ->-> -> ->->-> ->->
-
-    - ->->-> ->->->-> ->->->
-    - ->-> ->->-> ->->-> fast-path-> direct
-    - ->->/->-> ->-> direct
-    - ->->->-> ->-> ->->
+    Route question based on simple rules.
+    - recency keywords -> websearch
+    - short definition-style -> fast_path vectorstore
+    - greetings/chitchat -> direct
+    - default -> vectorstore
     """
-    logger.info(f"[QueryRouter] ->-> ->->: {state['question'][:100]}")
+    logger.info(f"[QueryRouter] analyze: {state['question'][:100]}")
 
     question = state["question"].lower()
     state["fast_path"] = False
 
-    recency_keywords = ["->->", "->->", "->->->->", "->->", "->->", "->->"]
+    recency_keywords = ["recent", "latest", "update", "news", "new"]
     is_recency = any(k in question for k in recency_keywords)
 
     short_len = len(question) <= 30
-    definition_keywords = ["->", "->->", "->->", "->->", "->->", "->"]
+    definition_keywords = ["?", "??", "??", "??", "??", "?", "what is", "define"]
     is_definition = short_len and any(k in question for k in definition_keywords)
 
     if is_recency:
         route = "websearch"
-        logger.info("[QueryRouter] -> ->->-> (->-> ->->)")
+        logger.info("[QueryRouter] -> websearch (recency)")
     elif is_definition:
-        # ->->->-> ->->-> ->-> ->-> ->->-> ->->->-> ->-> fast_path ->->->-> ->->
         route = "vectorstore"
         state["fast_path"] = True
-        logger.info("[QueryRouter] -> vectorstore (->->-> fast-path)")
-    elif any(keyword in question for keyword in ["->->", "hello", "hi", "->->", "->->->"]):
+        logger.info("[QueryRouter] -> vectorstore (definition fast-path)")
+    elif any(keyword in question for keyword in ["안녕", "hello", "hi", "감사", "고마워", "thanks"]):
         route = "direct"
-        logger.info("[QueryRouter] -> direct (->-> ->->->)")
+        logger.info("[QueryRouter] -> direct (no search)")
     else:
         route = "vectorstore"
-        logger.info("[QueryRouter] -> ->-> ->-> (->->)")
+        logger.info("[QueryRouter] -> vectorstore (default)")
 
     state["route"] = route
     return add_to_history(state, "query_router")
+
 
 
 def hybrid_retrieve_node(state: RAGState) -> RAGState:
