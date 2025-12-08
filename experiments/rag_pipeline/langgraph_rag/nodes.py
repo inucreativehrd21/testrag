@@ -1349,8 +1349,12 @@ def personalize_response_node(state: RAGState) -> RAGState:
                     reminder_parts.append(f"'{content}' 학습 목표")
                 else:
                     reminder_parts.append(f"'{content}'")
-            # 답변 끝에 자연스럽게 추가 (출처 마커 사용 안 함)
-            personalized_generation = generation.rstrip() + reminder_message
+
+        if reminder_parts:
+            # 자연스러운 상기 메시지 구성
+            if len(reminder_parts) == 1:
+                items_text = reminder_parts[0]
+            else:
                 items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
 
             reminder_message = (
@@ -1358,12 +1362,8 @@ def personalize_response_node(state: RAGState) -> RAGState:
                 f"함께 확인해보시면 도움이 될 수 있습니다."
             )
 
-            # 출처 섹션 앞에 삽입
-            if "📚 참고:" in generation:
-                parts = generation.split("📚 참고:")
-                personalized_generation = parts[0].rstrip() + reminder_message + "\n\n📚 참고:" + parts[1]
-            else:
-                personalized_generation = generation + reminder_message
+            # 답변 끝에 자연스럽게 추가 (출처 마커 사용 안 함)
+            personalized_generation = generation.rstrip() + reminder_message
 
             state["generation"] = personalized_generation
             state["reminder_added"] = True
