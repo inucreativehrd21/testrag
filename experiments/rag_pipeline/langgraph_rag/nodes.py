@@ -793,9 +793,10 @@ def generate_node(state):
     ]
 
     try:
+        # Allow up to config max; short 질문은 300으로 완화
         max_tokens = config.llm_max_tokens
         if len(question) <= 40:
-            max_tokens = min(max_tokens, 200)
+            max_tokens = min(config.llm_max_tokens, 300)
 
         response = resources.llm_client.chat.completions.create(
             model=config.llm_model,
