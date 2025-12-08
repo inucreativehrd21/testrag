@@ -155,6 +155,7 @@ def load_langgraph_rag(config_path: str):
     """Load LangGraph RAG system"""
     from langgraph_rag.graph import create_rag_graph
     from langgraph_rag.config import get_config
+    import chromadb
 
     logger.info(f"Loading LangGraph RAG with config: {config_path}")
     start_time = time.time()
@@ -167,6 +168,16 @@ def load_langgraph_rag(config_path: str):
         "personalized": create_rag_graph(enable_personalization=True),
         "plain": create_rag_graph(enable_personalization=False),
     }
+
+    # Chroma warmup to avoid first-query latency
+    try:
+        cfg = get_config(config_path)
+        client = chromadb.PersistentClient(path=str(cfg.chroma_db_path))
+        coll = client.get_collection("rag_chunks")
+        _ = coll.count()
+        logger.info("[Warmup] Chroma collection loaded for warm cache")
+    except Exception as e:
+        logger.warning(f"[Warmup] Chroma warmup skipped: {e}")
 
     load_time = time.time() - start_time
     logger.info(f"LangGraph RAG loaded in {load_time:.2f}s (personalized + plain)")
@@ -397,6 +408,7 @@ def process_langgraph_rag(
             initial_state["session_id"] = session_id
         if chat_history:
             initial_state["chat_history"] = [msg.model_dump() for msg in chat_history]
+        initial_state["enable_personalization"] = enable_personalization
 
         # Fast path: use plain graph to keep latency low
         graph_plain = None

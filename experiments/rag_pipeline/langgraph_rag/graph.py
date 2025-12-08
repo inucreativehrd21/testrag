@@ -79,11 +79,13 @@ def decide_to_generate_or_transform(
         return "websearch"
 
 
+
+
 def check_hallucination_and_usefulness(
     state: RAGState,
 ) -> Literal["answer_grading", "websearch", "retry_generate"]:
     """
-    환각 여부에 따라 다음 단계 결정
+    ?? ?? ??? ?? ?? ??
     """
     from .config import get_config
 
@@ -92,22 +94,27 @@ def check_hallucination_and_usefulness(
     config = get_config()
 
     if hallucination_grade == "supported":
-        logger.info("[Decision] 환각 없음 → answer_grading")
+        logger.info("[Decision] ?? ?? ? answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        # 안전 가드: 최대 재시도 초과 시 루프 중단
+        # ?? ???? ??? ?? ??? ????? ??? ??
+        if state.get("web_search_done") or not state.get("web_search_needed", True):
+            logger.warning("[Decision] ?? ??? ?? ? answer_grading")
+            return "answer_grading"
+        # ??? 1? ?? ???? ??
         if retry_count >= config.max_retries:
-            logger.warning("[Decision] 최대 재시도 초과 → 추가 검색 없이 종료 경로")
+            logger.warning("[Decision] ?? ??? ?? ? answer_grading")
             return "answer_grading"
 
-        logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
+        logger.warning("[Decision] ?? ?? ? ??? ??")
         state["retry_count"] += 1
         return "websearch"
     else:
-        logger.info("[Decision] 환각 불확실 → answer_grading")
+        logger.info("[Decision] ?? ??? ? answer_grading")
         return "answer_grading"
 
 
+def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
 def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     """
     답변 유용성 평가 이후 종료 또는 웹 검색 결정
