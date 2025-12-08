@@ -757,12 +757,12 @@ def generate_node(state):
 
     if not documents:
         logger.warning("[Generate] No documents; returning fallback message")
-        state["generation"] = "->-> ->->-> ->-> ->->->->->. ->->-> ->-> -> ->->->->-> ->->->->->."
+        state["generation"] = "관련 문서를 찾지 못했습니다."
         return add_to_history(state, "generate")
 
     # Context block
     context_block = "\n\n".join(
-        f"[->-> {i+1}] {meta.get('domain', 'unknown')}\n{doc}"
+        f"[문서 {i+1}] {meta.get('domain', 'unknown')}\n{doc}"
         for i, (doc, meta) in enumerate(zip(documents, metadatas))
     )
 
@@ -812,10 +812,10 @@ def generate_node(state):
 
         # Ensure example/code block is visually separated and labeled
         if "```" in answer_text:
-            if "예시" not in answer_text:
-                answer_text = answer_text.replace("```", "예시:\n```", 1)
-            if "\n\n```" not in answer_text:
-                answer_text = answer_text.replace("```", "\n\n```", 1)
+            head, rest = answer_text.split("```", 1)
+            head = head.rstrip()
+            rest = rest.rstrip()
+            answer_text = f"{head}\n\n예시:\n```{rest}"
 
         # 출처는 본문에 포함하지 않음 (별도 메타데이터 사용)
         state["generation"] = answer_text
@@ -823,7 +823,7 @@ def generate_node(state):
 
     except Exception as e:
         logger.error(f"[Generate] Error: {e}")
-        state["generation"] = "->-> ->->-> ->->-> ->->->->->->."
+        state["generation"] = "답변 생성에 실패했습니다."
 
     elapsed = time.time() - start_time
     logger.info(f"[Generate] Done ({elapsed:.2f}s)")
@@ -845,7 +845,7 @@ def _clean_tool_mentions(answer_text: str) -> str:
     """
     cleaned = answer_text
     for token in ["tavily", "websearch", "web search", "Tavily", "WebSearch"]:
-        cleaned = re.sub(rf"\\b{re.escape(token)}\\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"\b{re.escape(token)}\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
     return cleaned.strip()
 
