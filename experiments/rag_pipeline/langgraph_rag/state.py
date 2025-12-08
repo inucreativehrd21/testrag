@@ -136,7 +136,11 @@ class RAGState(TypedDict):
 
     # 흐름 제어
     web_search_needed: bool
+    web_search_count: int  # 웹서치 실행 횟수 추적
+    skip_hallucination_check: bool  # 환각검사 스킵 플래그
     retry_count: int
+    fast_path: bool
+    web_search_done: bool
 
     # 평가 결과
     document_relevance: Literal["relevant", "not_relevant", "unknown"]
@@ -182,7 +186,11 @@ def create_initial_state(question: str, user_id: str = "", user_context: Dict[st
         "final_metadatas": [],
         "generation": "",
         "web_search_needed": False,
+        "web_search_count": 0,
+        "skip_hallucination_check": False,
         "retry_count": 0,
+        "fast_path": False,
+        "web_search_done": False,
         "document_relevance": "unknown",
         "hallucination_grade": "not_sure",
         "answer_usefulness": "unknown",

@@ -942,9 +942,18 @@ def hallucination_check_node(state):
 
     generation = state["generation"]
     documents = state["final_documents"]
+    doc_relevance = state.get("document_relevance", "unknown")
+
+    # 문서 관련성이 relevant이거나 환각검사 스킵 플래그가 설정된 경우
+    if doc_relevance == "relevant" or state.get("skip_hallucination_check"):
+        logger.info("[HallucinationCheck] 문서 관련성 높음 → 환각검사 스킵")
+        state["hallucination_grade"] = "supported"
+        state["web_search_needed"] = False
+        return add_to_history(state, "hallucination_check")
 
     # fast-path or already web-searched
-    if state.get("fast_path") or state.get("web_search_done"):
+    if state.get("fast_path") or state.get("web_search_count", 0) >= 1:
+        logger.info("[HallucinationCheck] 웹서치 이미 진행됨 또는 fast_path → 스킵")
         state["hallucination_grade"] = "supported"
         state["web_search_needed"] = False
         return add_to_history(state, "hallucination_check")

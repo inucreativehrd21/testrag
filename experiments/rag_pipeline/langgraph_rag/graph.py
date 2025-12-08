@@ -58,6 +58,9 @@ def decide_to_generate_or_transform(
 ) -> Literal["transform_query", "generate", "websearch"]:
     """
     문서 관련성 평가 이후 다음 경로 결정
+    
+    - relevant: 바로 생성 (환각검사/웹서치 스킵)
+    - 그 외: 재시도 또는 웹 검색 (1회만)
     """
     from .config import get_config
 
@@ -66,16 +69,20 @@ def decide_to_generate_or_transform(
     retry_count = state["retry_count"]
 
     if document_relevance == "relevant":
-        logger.info("[Decision] 문서 관련성 높음 → generate")
+        logger.info("[Decision] 문서 관련성 높음 → generate (환각검사 스킵 예정)")
+        # 플래그 설정: 환각검사/웹서치 건너뛰기
+        state["skip_hallucination_check"] = True
         return "generate"
     elif retry_count < config.max_retries:
         logger.info(
             f"[Decision] 문서 관련성 부족 → 쿼리 재작성 (시도 {retry_count + 1}/{config.max_retries})"
         )
         state["retry_count"] += 1
+        state["skip_hallucination_check"] = False
         return "transform_query"
     else:
-        logger.warning("[Decision] 최대 재시도 초과 → 웹 검색")
+        logger.warning("[Decision] 최대 재시도 초과 → 웹 검색 (1회만)")
+        state["skip_hallucination_check"] = False
         return "websearch"
 
 
@@ -87,32 +94,39 @@ def check_hallucination_and_usefulness(
     state: RAGState,
 ) -> Literal["answer_grading", "websearch", "retry_generate"]:
     """
-    Decide next step after hallucination check.
+    환각 검사 이후 다음 단계 결정
+    
+    - 문서 관련성이 relevant이면: 환각검사 스킵하고 바로 answer_grading
+    - 문서 관련성이 relevant 아니면: 환각검사 진행, 필요시 웹서치 1회만
     """
     from .config import get_config
 
-    hallucination_grade = state["hallucination_grade"]
-    retry_count = state["retry_count"]
     config = get_config()
     doc_relevance = state.get("document_relevance", "unknown")
+    
+    # 문서 관련성이 relevant이면 환각검사 건너뛰고 바로 종료
+    if doc_relevance == "relevant" or state.get("skip_hallucination_check"):
+        logger.info("[Decision] 문서 관련성 높음 → 환각검사 스킵, answer_grading으로")
+        state["hallucination_grade"] = "supported"
+        return "answer_grading"
+    
+    hallucination_grade = state["hallucination_grade"]
+    web_search_count = state.get("web_search_count", 0)
 
     if hallucination_grade == "supported":
-        logger.info("[Decision] hallucination cleared -> answer_grading")
+        logger.info("[Decision] 환각검사 통과 → answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        # 문서 관련성이 높으면 추가 웹검색 없이 종료
-        if doc_relevance == "relevant":
-            logger.warning("[Decision] docs relevant -> skip websearch, go answer_grading")
+        # 웹서치는 최대 1번만 허용
+        if web_search_count >= 1:
+            logger.warning("[Decision] 웹서치 이미 1회 진행됨 → answer_grading으로 강제 이동")
             return "answer_grading"
-        # Allow at most one websearch
-        if state.get("web_search_done") or retry_count >= 1 or not state.get("web_search_needed", True):
-            logger.warning("[Decision] websearch already done/max -> answer_grading")
-            return "answer_grading"
-        logger.warning("[Decision] hallucination detected -> websearch once")
-        state["retry_count"] += 1
+        
+        logger.warning("[Decision] 환각 감지 → 웹서치 1회 진행")
+        state["web_search_count"] = web_search_count + 1
         return "websearch"
     else:
-        logger.info("[Decision] hallucination uncertain -> answer_grading")
+        logger.info("[Decision] 환각 불확실 → answer_grading")
         return "answer_grading"
 
 
