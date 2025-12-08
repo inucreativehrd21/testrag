@@ -791,11 +791,13 @@ def generate_node(state):
             "content": (
                 f"질문: {question}\n\n"
                 f"{history_text}문서:\n{context_block}\n\n"
-                "형식 요구:\n"
-                "1) 핵심 답변: 자연스러운 한두 단락으로 핵심만 정리.\n"
-                "2) 예시/코드가 있으면 아래에 '예시:' 제목을 붙이고 코드블록으로 분리.\n"
-                "3) 본문에는 출처/URL/이모지 넣지 말 것. 불릿은 꼭 필요할 때만 최소 사용.\n"
-                "4) 불필요하게 길게 쓰지 말 것."
+                "답변 형식 요구사항:\n"
+                "1. 핵심 설명: 명확한 단락으로 구분하여 작성 (빈 줄로 단락 분리)\n"
+                "2. 예시 코드: 필요시 '예시:' 제목과 함께 코드블록으로 분리 (단, '예시:' 키워드는 한 번만 사용)\n"
+                "3. 절대 금지: 출처, URL, 이모지(📚 등), References, 참고, 참고: 등 모든 출처 관련 표현\n"
+                "4. 불릿 포인트: 꼭 필요한 경우에만 최소한으로 사용\n"
+                "5. 간결성: 불필요하게 장황하게 쓰지 말 것\n\n"
+                "주의: 답변 본문에 출처나 이모지를 절대 포함하지 마세요."
             ),
         },
     ]
@@ -813,17 +815,26 @@ def generate_node(state):
         )
         answer_text = response.choices[0].message.content
 
-        # Strip prior reference sections and tool mentions
-        answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
-
-        # Ensure example/code block is visually separated and labeled
-        if "```" in answer_text:
-            head, rest = answer_text.split("```", 1)
-            head = head.rstrip()
-            rest = rest.rstrip()
-            answer_text = f"{head}\n\n예시:\n```{rest}"
-
-        # 출처는 본문에 포함하지 않음 (별도 메타데이터 사용)
+        # 1단계: 출처/이모지 완전 제거
+        answer_text = _strip_existing_sources(answer_text)
+        answer_text = _clean_tool_mentions(answer_text)
+        
+        # 2단계: 단락 구분 정리 (연속된 줄바꿈을 2개로 통일)
+        answer_text = re.sub(r'\n{3,}', '\n\n', answer_text)
+        
+        # 3단계: '예시:' 중복 제거 및 정리
+        if '```' in answer_text:
+            # '예시:' 키워드가 이미 있는지 확인
+            if '예시:' not in answer_text.split('```')[0]:
+                # 코드블록 앞에 '예시:' 추가
+                parts = answer_text.split('```', 1)
+                answer_text = f"{parts[0].rstrip()}\n\n예시:\n```{parts[1]}"
+            # 중복된 '예시:' 제거
+            answer_text = re.sub(r'(예시:\s*){2,}', '예시: ', answer_text)
+        
+        # 4단계: 최종 정리
+        answer_text = answer_text.strip()
+        
         state["generation"] = answer_text
         logger.info("[Generate] Generation done")
 
@@ -837,12 +848,25 @@ def generate_node(state):
     return add_to_history(state, "generate")
 
 def _strip_existing_sources(answer_text: str) -> str:
-    """Remove existing reference markers if present."""
-    markers = ["References:", "Reference", "출처", "출처:", "참고", "참고:", "📚"]
+    """Remove existing reference markers and emojis if present."""
+    # 모든 출처 관련 마커 (이모지 포함)
+    markers = [
+        "References:", "Reference:", "Reference",
+        "출처:", "출처", 
+        "참고:", "참고",
+        "📚 참고:", "📚",
+        "[출처]", "[참고]", "[References]"
+    ]
+    
+    result = answer_text
     for marker in markers:
-        if marker in answer_text:
-            return answer_text.split(marker)[0].rstrip()
-    return answer_text
+        if marker in result:
+            result = result.split(marker)[0].rstrip()
+    
+    # 추가: 남은 이모지 제거 (📚, 📖, 🔗 등)
+    result = re.sub(r'[📚📖🔗🔍📝💡]', '', result)
+    
+    return result.strip()
 
 
 def _clean_tool_mentions(answer_text: str) -> str:
@@ -1325,12 +1349,8 @@ def personalize_response_node(state: RAGState) -> RAGState:
                     reminder_parts.append(f"'{content}' 학습 목표")
                 else:
                     reminder_parts.append(f"'{content}'")
-
-        if reminder_parts:
-            # 자연스러운 상기 메시지 구성
-            if len(reminder_parts) == 1:
-                items_text = reminder_parts[0]
-            else:
+            # 답변 끝에 자연스럽게 추가 (출처 마커 사용 안 함)
+            personalized_generation = generation.rstrip() + reminder_message
                 items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
 
             reminder_message = (
