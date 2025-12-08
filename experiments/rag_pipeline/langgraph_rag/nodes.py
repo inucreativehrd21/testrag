@@ -781,9 +781,10 @@ def generate_node(state):
         {
             "role": "user",
             "content": (
-                f"->->: {question}\n\n"
-                f"{history_text}->->->->:\n{context_block}\n\n"
-                "->->: ->->->-> ->->-> ->->-> ->->->->, ->-> ->->-> '->-> Reference' ->->->-> ->-> ->->->."
+                f"질문: {question}\n\n"
+                f"{history_text}문서:\n{context_block}\n\n"
+                "답변: 문서를 근거로 짧고 자연스럽게 답하세요. "
+                "본문에는 출처/URL을 넣지 말고, 예시나 목록은 줄바꿈과 불릿으로 가독성을 높여주세요."
             ),
         },
     ]
@@ -805,22 +806,8 @@ def generate_node(state):
         # Strip prior reference sections and tool mentions
         answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
 
-        # URL extraction for references
-        source_urls = []
-        for meta in metadatas:
-            url = meta.get("url", "unknown")
-            if url != "unknown" and url not in source_urls:
-                source_urls.append(url)
-
-        if source_urls:
-            sources_section = "\n\n->-> Reference:\n" + "\n".join(
-                f"- {url}" for url in source_urls
-            )
-            answer = answer_text + sources_section
-        else:
-            answer = answer_text
-
-        state["generation"] = answer
+        # 출처는 본문에 포함하지 않음 (별도 메타데이터 사용)
+        state["generation"] = answer_text
         logger.info("[Generate] Generation done")
 
     except Exception as e:
