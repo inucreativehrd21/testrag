@@ -22,6 +22,7 @@ import logging
 import time
 import sys
 import os
+from threading import Lock, Thread
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 
@@ -59,6 +60,33 @@ app.add_middleware(
 rag_instance = None
 rag_type = None
 config_path = None
+personalization_cache: Dict[str, Dict[str, Any]] = {}
+personalization_lock = Lock()
+
+
+def _make_cache_key(session_id: Optional[str], user_id: str) -> Optional[str]:
+    """Return a stable cache key for personalization results."""
+    if session_id:
+        return f"session:{session_id}"
+    if user_id:
+        return f"user:{user_id}"
+    return None
+
+
+def _get_cached_personalization(cache_key: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Thread-safe read from personalization cache."""
+    if not cache_key:
+        return None
+    with personalization_lock:
+        return personalization_cache.get(cache_key)
+
+
+def _store_personalization(cache_key: Optional[str], data: Dict[str, Any]) -> None:
+    """Thread-safe write to personalization cache."""
+    if not cache_key or not data:
+        return
+    with personalization_lock:
+        personalization_cache[cache_key] = data
 
 
 # === Request/Response Models ===
@@ -147,6 +175,72 @@ def load_langgraph_rag(config_path: str):
 
 
 # === Chat Processing ===
+
+
+def _run_personalized_graph_async(
+    cache_key: Optional[str],
+    question: str,
+    chat_history: List[ChatMessage],
+    user_id: str,
+    user_context: Optional[Dict[str, Any]],
+    session_id: Optional[str],
+) -> None:
+    """Fire-and-forget personalized graph run; caches extras for later turns."""
+    global rag_instance
+    try:
+        if not isinstance(rag_instance, dict):
+            logger.warning("[Personalization] Personalized graph not available (missing dict instance)")
+            return
+
+        personalized_graph = rag_instance.get("personalized")
+        if personalized_graph is None:
+            logger.warning("[Personalization] Personalized graph not initialized")
+            return
+
+        from langgraph_rag.state import create_initial_state
+
+        personalized_state = create_initial_state(
+            question=question,
+            user_id=user_id,
+            user_context=user_context or {},
+        )
+
+        if session_id:
+            personalized_state["session_id"] = session_id
+        if chat_history:
+            personalized_state["chat_history"] = [msg.model_dump() for msg in chat_history]
+
+        result = personalized_graph.invoke(personalized_state)
+        data = {
+            "answer": result.get("generation", ""),
+            "related_questions": result.get("related_questions", []),
+            "workflow": result.get("workflow_history", []),
+            "reminder_added": result.get("reminder_added", False),
+            "timestamp": time.time(),
+        }
+        _store_personalization(cache_key, data)
+        logger.info("[Personalization] Background personalized run complete (cached)")
+    except Exception as e:
+        logger.warning(f"[Personalization] Background run failed: {e}")
+
+
+def _kickoff_personalization(
+    cache_key: Optional[str],
+    question: str,
+    chat_history: List[ChatMessage],
+    user_id: str,
+    user_context: Optional[Dict[str, Any]],
+    session_id: Optional[str],
+) -> None:
+    """Spawn a daemon thread to compute personalization without blocking the main response."""
+    if not cache_key:
+        return
+    thread = Thread(
+        target=_run_personalized_graph_async,
+        args=(cache_key, question, chat_history, user_id, user_context, session_id),
+        daemon=True,
+    )
+    thread.start()
 
 
 def extract_title_from_url(url: str) -> str:
@@ -266,6 +360,12 @@ def process_optimized_rag(
         )
 
 
+
+
+
+
+
+
 def process_langgraph_rag(
     question: str,
     chat_history: List[ChatMessage],
@@ -274,16 +374,17 @@ def process_langgraph_rag(
     enable_personalization: bool = True,
     session_id: Optional[str] = None,
 ) -> ChatResponse:
-    """Process request with LangGraph RAG"""
+    """Process request with LangGraph RAG (fast plain graph + async personalization)"""
     global rag_instance
 
     try:
         start_time = time.time()
+        cache_key = _make_cache_key(session_id, user_id)
 
         logger.info(f"[LangGraph RAG] Processing: {question[:50]}...")
         logger.info(f"[LangGraph RAG] User ID: {user_id}, Personalization: {enable_personalization}, Session: {session_id}")
 
-        # Create initial state with personalization
+        # Create initial state (re-used for both graphs)
         from langgraph_rag.state import create_initial_state
         initial_state = create_initial_state(
             question=question,
@@ -297,22 +398,19 @@ def process_langgraph_rag(
         if chat_history:
             initial_state["chat_history"] = [msg.model_dump() for msg in chat_history]
 
-        # Select graph based on personalization flag (preloaded at startup)
-        graph = None
+        # Fast path: use plain graph to keep latency low
+        graph_plain = None
         if isinstance(rag_instance, dict):
-            graph = rag_instance.get("personalized") if enable_personalization else rag_instance.get("plain")
-            if graph is None:
-                graph = rag_instance.get("personalized") or rag_instance.get("plain")
+            graph_plain = rag_instance.get("plain") or rag_instance.get("personalized")
         else:
-            graph = rag_instance
+            graph_plain = rag_instance
 
-        if graph is None:
+        if graph_plain is None:
             raise ValueError("LangGraph instance not initialized")
 
-        # Run LangGraph with personalization control
-        result = graph.invoke(initial_state)
+        result = graph_plain.invoke(initial_state)
 
-        answer = result.get("generation", "답변 생성에 실패했습니다.")
+        answer = result.get("generation", "??? ???? ?????.")
 
         # Get final documents (after reranking)
         final_documents = result.get("final_documents", [])
@@ -330,18 +428,29 @@ def process_langgraph_rag(
         # Build sources (Django compatible format)
         sources = []
         for i, _ in enumerate(final_documents[:10]):  # Top 10
-            # Get metadata if available
             metadata = final_metadatas[i] if i < len(final_metadatas) else {}
             url = metadata.get("url") or metadata.get("source") or metadata.get("link") or "unknown"
             domain = metadata.get("domain") or metadata.get("source_type") or "unknown"
             title = metadata.get("title") or (
                 extract_title_from_url(url) if url != "unknown" else f"Document {i + 1}"
             )
-
             sources.append(Source(url=url, title=title, domain=domain))
 
-        # Get related questions
+        # Get related questions (plain graph may not have personalization nodes)
         related_questions = result.get("related_questions", [])
+
+        # Attach cached personalization if available
+        cached_personalization = _get_cached_personalization(cache_key)
+        personalization_meta: Dict[str, Any] = {"status": "disabled"}
+
+        if enable_personalization:
+            personalization_meta = {"status": "pending"}
+            if cached_personalization:
+                personalization_meta = {"status": "ready", **cached_personalization}
+                related_questions = cached_personalization.get("related_questions", related_questions)
+
+            # Fire-and-forget personalized graph run (non-blocking)
+            _kickoff_personalization(cache_key, question, chat_history, user_id, user_context, session_id)
 
         total_time = time.time() - start_time
 
@@ -360,17 +469,13 @@ def process_langgraph_rag(
                 "answer_usefulness": result.get("answer_usefulness"),
                 "retry_count": result.get("retry_count", 0),
                 "document_count": len(final_documents),
-                "personalization": {
-                    "reminder_added": result.get("reminder_added", False),
-                    "related_items": len(result.get("related_selections", [])),
-                },
+                "personalization": personalization_meta,
                 "response_time": round(total_time, 2),
                 "session_id": session_id,
                 "chat_history_length": len(chat_history) if chat_history else 0,
                 "enable_personalization": enable_personalization,
             }
         )
-
 
     except Exception as e:
         logger.exception(f"[LangGraph RAG] Error: {e}")
@@ -380,7 +485,6 @@ def process_langgraph_rag(
             sources=[],
             error=str(e)
         )
-
 
 # === API Endpoints ===
 

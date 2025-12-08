@@ -528,8 +528,15 @@ def rerank_stage2_node(state: RAGState) -> RAGState:
         state["final_metadatas"] = []
         return add_to_history(state, "rerank_stage2")
 
-    # 최종 top_k 선택
+    # 작은 후보군은 stage2를 건너뛰고 바로 반환 (지연 최소화)
     final_k = config.rerank_top_k
+    if len(documents) <= max(4, final_k):
+        state["final_documents"] = documents[:final_k] if final_k > 0 else documents
+        state["final_metadatas"] = metadatas[:final_k] if final_k > 0 else metadatas
+        logger.info("[Rerank Stage 2] 후보가 적어 stage2 스킵")
+        return add_to_history(state, "rerank_stage2")
+
+    # 최종 top_k 선택
     reranked_docs = _rerank(question, documents, resources.reranker_stage2, final_k)
 
     # 메타데이터 매핑
