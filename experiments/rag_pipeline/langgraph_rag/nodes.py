@@ -785,9 +785,9 @@ def generate_node(state):
                 f"{history_text}문서:\n{context_block}\n\n"
                 "형식 요구:\n"
                 "1) 핵심 답변: 자연스러운 한두 단락으로 핵심만 정리.\n"
-                "2) 예시가 있으면 '예시:' 제목 뒤에 코드블록 또는 짧은 문장으로 분리.\n"
-                "3) 본문에 출처/URL을 넣지 말 것. 불릿은 꼭 필요할 때만 간결하게 사용.\n"
-                "4) 지나치게 길게 쓰지 말 것."
+                "2) 예시/코드가 있으면 아래에 '예시:' 제목을 붙이고 코드블록으로 분리.\n"
+                "3) 본문에는 출처/URL/이모지 넣지 말 것. 불릿은 꼭 필요할 때만 최소 사용.\n"
+                "4) 불필요하게 길게 쓰지 말 것."
             ),
         },
     ]
@@ -831,10 +831,11 @@ def generate_node(state):
     return add_to_history(state, "generate")
 
 def _strip_existing_sources(answer_text: str) -> str:
-    """기존 출처 섹션 제거"""
-    marker = "📚 참고"
-    if marker in answer_text:
-        return answer_text.split(marker)[0].rstrip()
+    """Remove existing reference markers if present."""
+    markers = ["References:", "Reference", "출처", "출처:", "참고", "참고:", "📚"]
+    for marker in markers:
+        if marker in answer_text:
+            return answer_text.split(marker)[0].rstrip()
     return answer_text
 
 
