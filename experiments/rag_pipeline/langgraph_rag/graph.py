@@ -94,11 +94,16 @@ def check_hallucination_and_usefulness(
     hallucination_grade = state["hallucination_grade"]
     retry_count = state["retry_count"]
     config = get_config()
+    doc_relevance = state.get("document_relevance", "unknown")
 
     if hallucination_grade == "supported":
         logger.info("[Decision] hallucination cleared -> answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
+        # 문서 관련성이 높으면 추가 웹검색 없이 종료
+        if doc_relevance == "relevant":
+            logger.warning("[Decision] docs relevant -> skip websearch, go answer_grading")
+            return "answer_grading"
         # Allow at most one websearch
         if state.get("web_search_done") or retry_count >= 1 or not state.get("web_search_needed", True):
             logger.warning("[Decision] websearch already done/max -> answer_grading")
