@@ -44,6 +44,7 @@ context_quality:
   enabled: true            # Enable/disable quality filtering
   threshold: 0.6           # Relevance threshold (not currently used, but for future)
   evaluator_model: gpt-4o-mini  # Cheap model for context evaluation
+  max_web_search: 1        # 웹서치 최대 횟수 (1회만 허용)
 
 llm:
   provider: openai

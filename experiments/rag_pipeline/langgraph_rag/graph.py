@@ -112,14 +112,16 @@ def check_hallucination_and_usefulness(
     
     hallucination_grade = state["hallucination_grade"]
     web_search_count = state.get("web_search_count", 0)
+    config = get_config()
+    max_web_search = config.config["context_quality"].get("max_web_search", 1)
 
     if hallucination_grade == "supported":
         logger.info("[Decision] 환각검사 통과 → answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        # 웹서치는 최대 1번만 허용
-        if web_search_count >= 1:
-            logger.warning("[Decision] 웹서치 이미 1회 진행됨 → answer_grading으로 강제 이동")
+        # 웹서치는 설정된 횟수만 허용
+        if web_search_count >= max_web_search:
+            logger.warning(f"[Decision] 웹서치 이미 {max_web_search}회 진행됨 → answer_grading으로 강제 이동")
             return "answer_grading"
         
         logger.warning("[Decision] 환각 감지 → 웹서치 1회 진행")
@@ -142,18 +144,19 @@ def grade_generation_usefulness(state: RAGState) -> Literal["personalize", "webs
     answer_usefulness = state["answer_usefulness"]
     web_search_count = state.get("web_search_count", 0)
     config = get_config()
+    max_web_search = config.config["context_quality"].get("max_web_search", 1)
 
     if answer_usefulness == "useful":
         logger.info("[Decision] 답변 유용 → 개인화 단계로")
         return "personalize"
     
-    # 웹서치 카운트 기반 제한
-    if web_search_count >= config.max_retries:
-        logger.warning(f"[Decision] 웹서치 최대 횟수({config.max_retries}) 도달 → 강제 종료")
+    # 웹서치 카운트 기반 제한 (1회만)
+    if web_search_count >= max_web_search:
+        logger.warning(f"[Decision] 웹서치 최대 횟수({max_web_search}) 도달 → 강제 종료")
         return "end"
     
     logger.warning(
-        f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 ({web_search_count + 1}/{config.max_retries})"
+        f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 ({web_search_count + 1}/{max_web_search})"
     )
     return "websearch"
 
