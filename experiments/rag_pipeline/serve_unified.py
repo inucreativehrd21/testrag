@@ -155,6 +155,7 @@ def load_langgraph_rag(config_path: str):
     """Load LangGraph RAG system"""
     from langgraph_rag.graph import create_rag_graph
     from langgraph_rag.config import get_config
+    from langgraph_rag.nodes import get_resources
     import chromadb
 
     logger.info(f"Loading LangGraph RAG with config: {config_path}")
@@ -168,6 +169,13 @@ def load_langgraph_rag(config_path: str):
         "personalized": create_rag_graph(enable_personalization=True),
         "plain": create_rag_graph(enable_personalization=False),
     }
+
+    # Preload shared resources (embedding/reranker/Chroma/LLMs) to avoid first-request latency
+    try:
+        _ = get_resources()
+        logger.info("[Warmup] LangGraph resources initialized")
+    except Exception as e:
+        logger.warning(f"[Warmup] LangGraph resources init failed (will lazy-load on first use): {e}")
 
     # Chroma warmup to avoid first-query latency
     try:
