@@ -791,13 +791,28 @@ def generate_node(state):
             "content": (
                 f"질문: {question}\n\n"
                 f"{history_text}문서:\n{context_block}\n\n"
-                "답변 형식 요구사항:\n"
-                "1. 핵심 설명: 명확한 단락으로 구분하여 작성 (빈 줄로 단락 분리)\n"
-                "2. 예시 코드: 필요시 '예시:' 제목과 함께 코드블록으로 분리 (단, '예시:' 키워드는 한 번만 사용)\n"
-                "3. 절대 금지: 출처, URL, 이모지(📚 등), References, 참고, 참고: 등 모든 출처 관련 표현\n"
-                "4. 불릿 포인트: 꼭 필요한 경우에만 최소한으로 사용\n"
-                "5. 간결성: 불필요하게 장황하게 쓰지 말 것\n\n"
-                "주의: 답변 본문에 출처나 이모지를 절대 포함하지 마세요."
+                "===== 답변 작성 규칙 (엄격 준수) =====\n\n"
+                "1. 문단 구성 (필수):\n"
+                "   - 첫 문단: 핵심 개념이나 정의를 2-3문장으로 설명\n"
+                "   - 둘째 문단: 상세 설명이나 특징 (필요시)\n"
+                "   - 각 문단 사이에는 반드시 빈 줄 삽입\n"
+                "   - 문단 내에서는 줄바꿈 없이 자연스럽게 이어지도록 작성\n\n"
+                "2. 예시 코드 (필요시만):\n"
+                "   - 본문 설명이 완전히 끝난 후, 맨 마지막에 배치\n"
+                "   - 반드시 '예시:' 제목을 한 번만 붙이고 그 아래 코드블록 작성\n"
+                "   - 코드블록 앞/뒤로 충분한 여백(빈 줄) 확보\n\n"
+                "3. 절대 금지 사항:\n"
+                "   - 출처, 참고, References, URL, 이모지(📚📖🔗 등) 일체 금지\n"
+                "   - '예시:'라는 단어를 본문 중간에 넣지 말 것\n"
+                "   - 불필요한 불릿 포인트나 번호 목록 자제\n\n"
+                "4. 작성 스타일:\n"
+                "   - 자연스럽고 대화체로 설명\n"
+                "   - 간결하고 명확하게 (불필요한 장황함 금지)\n"
+                "   - 문장은 짧고 읽기 쉽게\n\n"
+                "좋은 예시:\n"
+                "그리디 알고리즘은 매 순간 최선의 선택을 하는 방법입니다. 전체 최적해를 보장하지는 않지만, 빠르고 직관적인 해결책을 제공합니다.\n\n"
+                "Python에서는 표준 라이브러리만으로 충분히 구현할 수 있습니다. 정렬이 필요하면 sorted()를, 우선순위 큐가 필요하면 heapq 모듈을 사용하면 됩니다.\n\n"
+                "예시:\n```python\nimport heapq\narr = [5, 2, 8, 1]\nheapq.heapify(arr)\n```"
             ),
         },
     ]
@@ -819,21 +834,55 @@ def generate_node(state):
         answer_text = _strip_existing_sources(answer_text)
         answer_text = _clean_tool_mentions(answer_text)
         
-        # 2단계: 단락 구분 정리 (연속된 줄바꿈을 2개로 통일)
-        answer_text = re.sub(r'\n{3,}', '\n\n', answer_text)
+        # 2단계: 잘못된 '예시:' 위치 수정 (본문 중간에 있으면 제거하고 맨 끝으로)
+        lines = answer_text.split('\n')
+        main_content = []
+        code_blocks = []
+        example_title_added = False
+        in_code_block = False
         
-        # 3단계: '예시:' 중복 제거 및 정리
-        if '```' in answer_text:
-            # '예시:' 키워드가 이미 있는지 확인
-            if '예시:' not in answer_text.split('```')[0]:
-                # 코드블록 앞에 '예시:' 추가
-                parts = answer_text.split('```', 1)
-                answer_text = f"{parts[0].rstrip()}\n\n예시:\n```{parts[1]}"
-            # 중복된 '예시:' 제거
-            answer_text = re.sub(r'(예시:\s*){2,}', '예시: ', answer_text)
+        for line in lines:
+            if '```' in line:
+                in_code_block = not in_code_block
+                code_blocks.append(line)
+            elif in_code_block:
+                code_blocks.append(line)
+            elif '예시:' in line and not example_title_added:
+                example_title_added = True
+                continue  # 중간의 '예시:' 제거
+            else:
+                if not in_code_block and code_blocks:
+                    # 코드블록 수집 완료
+                    continue
+                main_content.append(line)
         
-        # 4단계: 최종 정리
+        # 3단계: 본문 재구성 (단락 정리)
+        main_text = '\n'.join(main_content).strip()
+        # 연속된 공백줄을 2개로 통일
+        main_text = re.sub(r'\n{3,}', '\n\n', main_text)
+        # 단일 줄바꿈을 공백으로 (문단 내 자연스러운 흐름)
+        paragraphs = main_text.split('\n\n')
+        cleaned_paragraphs = []
+        for para in paragraphs:
+            # 각 문단 내의 불필요한 줄바꿈 제거
+            cleaned = re.sub(r'\n(?!\n)', ' ', para.strip())
+            cleaned = re.sub(r'\s+', ' ', cleaned)  # 연속 공백 제거
+            if cleaned:
+                cleaned_paragraphs.append(cleaned)
+        
+        main_text = '\n\n'.join(cleaned_paragraphs)
+        
+        # 4단계: 코드블록이 있으면 맨 끝에 예쁘게 추가
+        if code_blocks:
+            code_text = '\n'.join(code_blocks)
+            answer_text = f"{main_text}\n\n예시:\n{code_text}"
+        else:
+            answer_text = main_text
+        
+        # 5단계: 최종 정리
         answer_text = answer_text.strip()
+        # 중복된 '예시:' 제거
+        answer_text = re.sub(r'(예시:\s*\n?){2,}', '예시:\n', answer_text)
         
         state["generation"] = answer_text
         logger.info("[Generate] Generation done")
