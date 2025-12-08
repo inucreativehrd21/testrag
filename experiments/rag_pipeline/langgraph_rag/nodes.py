@@ -165,12 +165,20 @@ def intent_classifier_node(state: RAGState) -> RAGState:
     question = state["question"]
     intent = "unknown"
 
+    # Fast heuristic: 개발/파이썬/깃 키워드가 보이면 바로 in_scope
+    lower_q = question.lower()
+    keyword_hits = ["python", "파이썬", "py ", "코딩", "개발", "git", "깃", "github", "gitlab"]
+    if any(k in lower_q for k in keyword_hits):
+        state["intent"] = "in_scope"
+        return add_to_history(state, "intent_classifier")
+
     prompt = f"""다음 사용자의 질문이 개발/프로그래밍/학습 관련인지 분류하세요.
 반드시 아래 중 하나의 라벨만 답변:
 - IN_SCOPE: 개발, 프로그래밍, 소프트웨어 학습/디버깅/도구 사용
 - GREETING: 인사, 감사, 안부
 - CHITCHAT: 잡담/사적요청 (예: 아이스크림 사줘, 노래 추천)
 - NONSENSICAL: 무의미/스팸/의미 없는 입력
+모호하면 IN_SCOPE로 분류
 
 질문: {question}
 
@@ -193,7 +201,7 @@ def intent_classifier_node(state: RAGState) -> RAGState:
         elif "NON" in label:
             intent = "nonsensical"
         else:
-            intent = "unknown"
+            intent = "in_scope"
     except Exception as e:
         logger.warning(f"[Intent] 분류 실패: {e}, 기본 in_scope로 처리")
         intent = "in_scope"
@@ -794,9 +802,7 @@ def generate_node(state):
 
     try:
         # Allow up to config max; short 질문은 300으로 완화
-        max_tokens = config.llm_max_tokens
-        if len(question) <= 40:
-            max_tokens = min(config.llm_max_tokens, 300)
+        max_tokens = config.llm_max_tokens  # allow full configured limit for completeness
 
         response = resources.llm_client.chat.completions.create(
             model=config.llm_model,
