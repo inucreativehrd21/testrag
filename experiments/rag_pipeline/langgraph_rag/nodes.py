@@ -783,8 +783,9 @@ def generate_node(state):
             "content": (
                 f"질문: {question}\n\n"
                 f"{history_text}문서:\n{context_block}\n\n"
-                "답변: 문서를 근거로 짧고 자연스럽게 답하세요. "
-                "본문에는 출처/URL을 넣지 말고, 예시나 목록은 줄바꿈과 불릿으로 가독성을 높여주세요."
+                "답변: 문서를 근거로 자연스러운 문단형 답변을 작성하세요. "
+                "본문에는 출처/URL을 넣지 말고, 필요하면 예시나 코드를 별도 문단/코드블록으로 구분해 주세요. "
+                "불릿은 꼭 필요할 때만 간결하게 사용하세요."
             ),
         },
     ]
@@ -1428,7 +1429,8 @@ Answer summary: {answer_only}"""
 
 def _strip_existing_sources(answer_text: str) -> str:
     """Strip existing reference markers if present."""
-    marker = "References:"
-    if marker in answer_text:
-        return answer_text.split(marker)[0].rstrip()
+    markers = ["References:", "출처", "참고", "Reference", "참고:", "출처:"]
+    for marker in markers:
+        if marker in answer_text:
+            return answer_text.split(marker)[0].rstrip()
     return answer_text
