@@ -236,39 +236,67 @@ def intent_classifier_node(state: RAGState) -> RAGState:
 
 def query_router_node(state: RAGState) -> RAGState:
     """
-    Route question based on simple rules.
-    - recency keywords -> websearch
-    - short definition-style -> fast_path vectorstore
-    - greetings/chitchat -> direct
-    - default -> vectorstore
+    LLM 기반 질문 라우팅
+    - vectorstore: 기존 문서로 답변 가능
+    - websearch: 최신 정보 필요
+    - direct: 검색 불필요 (인사/감사 등)
     """
     logger.info(f"[QueryRouter] analyze: {state['question'][:100]}")
 
-    question = state["question"].lower()
+    resources = get_resources()
+    config = get_config()
+    question = state["question"]
     state["fast_path"] = False
 
-    recency_keywords = ["recent", "latest", "update", "news", "new"]
-    is_recency = any(k in question for k in recency_keywords)
+    # 빠른 휴리스틱 체크 (간단한 경우만)
+    question_lower = question.lower()
+    if any(kw in question_lower for kw in ["안녕", "hello", "hi", "감사", "고마워", "thanks"]):
+        state["route"] = "direct"
+        logger.info("[QueryRouter] -> direct (greeting/thanks)")
+        return add_to_history(state, "query_router")
 
-    short_len = len(question) <= 30
-    definition_keywords = ["?", "??", "??", "??", "??", "?", "what is", "define"]
-    is_definition = short_len and any(k in question for k in definition_keywords)
+    # LLM 기반 분류
+    prompt = f"""다음 질문을 분석하여 적절한 검색 경로를 선택하세요.
 
-    if is_recency:
-        route = "websearch"
-        logger.info("[QueryRouter] -> websearch (recency)")
-    elif is_definition:
-        route = "vectorstore"
-        state["fast_path"] = True
-        logger.info("[QueryRouter] -> vectorstore (definition fast-path)")
-    elif any(keyword in question for keyword in ["안녕", "hello", "hi", "감사", "고마워", "thanks"]):
-        route = "direct"
-        logger.info("[QueryRouter] -> direct (no search)")
-    else:
-        route = "vectorstore"
-        logger.info("[QueryRouter] -> vectorstore (default)")
+질문: {question}
 
-    state["route"] = route
+경로 선택 기준:
+1. VECTORSTORE: 기존 기술 문서/가이드로 답변 가능 (개념, 사용법, 문법 등)
+2. WEBSEARCH: 최신 정보 필요 (최근 업데이트, 뉴스, 릴리스 노트 등)
+3. FAST_VECTORSTORE: 간단한 정의/설명 질문 (빠른 응답 가능)
+
+판단 예시:
+- "Python에서 리스트 컴프리헨션이란?" → FAST_VECTORSTORE
+- "Git 브랜치 전략 종류" → VECTORSTORE
+- "Python 3.12 새로운 기능" → WEBSEARCH
+- "Django 최근 보안 업데이트" → WEBSEARCH
+
+한 단어만 답변하세요 (VECTORSTORE, WEBSEARCH, FAST_VECTORSTORE):"""
+
+    try:
+        response = resources.llm_client.chat.completions.create(
+            model=config.context_quality_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=20,
+        )
+        label = response.choices[0].message.content.strip().upper()
+
+        if "FAST" in label:
+            state["route"] = "vectorstore"
+            state["fast_path"] = True
+            logger.info("[QueryRouter] -> vectorstore (fast-path)")
+        elif "WEBSEARCH" in label:
+            state["route"] = "websearch"
+            logger.info("[QueryRouter] -> websearch (recency)")
+        else:
+            state["route"] = "vectorstore"
+            logger.info("[QueryRouter] -> vectorstore (default)")
+
+    except Exception as e:
+        logger.warning(f"[QueryRouter] LLM 분류 실패: {e}, 기본값 vectorstore 사용")
+        state["route"] = "vectorstore"
+
     return add_to_history(state, "query_router")
 
 
@@ -540,10 +568,12 @@ def rerank_stage2_node(state: RAGState) -> RAGState:
 
     # 작은 후보군은 stage2를 건너뛰고 바로 반환 (지연 최소화)
     final_k = config.rerank_top_k
-    if len(documents) <= max(4, final_k):
+    skip_threshold = config.config["retrieval"].get("rerank_stage2_skip_threshold", 4)
+    
+    if len(documents) <= max(skip_threshold, final_k):
         state["final_documents"] = documents[:final_k] if final_k > 0 else documents
         state["final_metadatas"] = metadatas[:final_k] if final_k > 0 else metadatas
-        logger.info("[Rerank Stage 2] 후보가 적어 stage2 스킵")
+        logger.info(f"[Rerank Stage 2] 후보 {len(documents)}개 <= {skip_threshold} → stage2 스킵")
         return add_to_history(state, "rerank_stage2")
 
     # 최종 top_k 선택
@@ -714,16 +744,27 @@ def transform_query_node(state):
 
     question = state["question"]
 
-    prompt = f"""다음 질문을 더 구체적이고 검색하기 좋은 형태로 재작성하세요.
+    prompt = f"""다음 질문을 검색 엔진에 최적화된 형태로 재작성하세요.
 
 원본 질문: {question}
 
-재작성 지침:
-- 핵심 키워드 강조
-- 구체적인 용어 사용
-- 검색에 도움이 되는 컨텍스트 추가
+재작성 전략:
+1. 핵심 키워드 추출 및 강조
+   - 기술명, 라이브러리명, 개념명 등을 명확히 표기
+   - 예: "파이썬에서 딕셔너리" → "Python dictionary 자료구조"
 
-재작성된 질문:"""
+2. 유사어 및 관련 용어 확장
+   - 동의어나 상위/하위 개념 포함
+   - 예: "오류" → "에러(error), 예외(exception)"
+
+3. 검색 컨텍스트 명시
+   - 사용 목적, 환경, 버전 등 구체화
+   - 예: "깃 사용법" → "Git 기본 명령어 사용법 (초보자용)"
+
+4. 불필요한 조사 및 구어체 제거
+   - 간결하고 명확한 형태로 변환
+
+재작성된 질문 (한 줄로):"""
 
     try:
         response = resources.llm_client.chat.completions.create(
@@ -830,59 +871,11 @@ def generate_node(state):
         )
         answer_text = response.choices[0].message.content
 
-        # 1단계: 출처/이모지 완전 제거
+        # 후처리 파이프라인
         answer_text = _strip_existing_sources(answer_text)
         answer_text = _clean_tool_mentions(answer_text)
-        
-        # 2단계: 잘못된 '예시:' 위치 수정 (본문 중간에 있으면 제거하고 맨 끝으로)
-        lines = answer_text.split('\n')
-        main_content = []
-        code_blocks = []
-        example_title_added = False
-        in_code_block = False
-        
-        for line in lines:
-            if '```' in line:
-                in_code_block = not in_code_block
-                code_blocks.append(line)
-            elif in_code_block:
-                code_blocks.append(line)
-            elif '예시:' in line and not example_title_added:
-                example_title_added = True
-                continue  # 중간의 '예시:' 제거
-            else:
-                if not in_code_block and code_blocks:
-                    # 코드블록 수집 완료
-                    continue
-                main_content.append(line)
-        
-        # 3단계: 본문 재구성 (단락 정리)
-        main_text = '\n'.join(main_content).strip()
-        # 연속된 공백줄을 2개로 통일
-        main_text = re.sub(r'\n{3,}', '\n\n', main_text)
-        # 단일 줄바꿈을 공백으로 (문단 내 자연스러운 흐름)
-        paragraphs = main_text.split('\n\n')
-        cleaned_paragraphs = []
-        for para in paragraphs:
-            # 각 문단 내의 불필요한 줄바꿈 제거
-            cleaned = re.sub(r'\n(?!\n)', ' ', para.strip())
-            cleaned = re.sub(r'\s+', ' ', cleaned)  # 연속 공백 제거
-            if cleaned:
-                cleaned_paragraphs.append(cleaned)
-        
-        main_text = '\n\n'.join(cleaned_paragraphs)
-        
-        # 4단계: 코드블록이 있으면 맨 끝에 예쁘게 추가
-        if code_blocks:
-            code_text = '\n'.join(code_blocks)
-            answer_text = f"{main_text}\n\n예시:\n{code_text}"
-        else:
-            answer_text = main_text
-        
-        # 5단계: 최종 정리
-        answer_text = answer_text.strip()
-        # 중복된 '예시:' 제거
-        answer_text = re.sub(r'(예시:\s*\n?){2,}', '예시:\n', answer_text)
+        answer_text = _relocate_code_examples(answer_text)
+        answer_text = _format_paragraphs(answer_text)
         
         state["generation"] = answer_text
         logger.info("[Generate] Generation done")
@@ -895,6 +888,81 @@ def generate_node(state):
     logger.info(f"[Generate] Done ({elapsed:.2f}s)")
 
     return add_to_history(state, "generate")
+
+def _relocate_code_examples(answer_text: str) -> str:
+    """
+    코드 예시를 본문 맨 끝으로 재배치
+    
+    Args:
+        answer_text: 원본 답변 텍스트
+        
+    Returns:
+        str: 코드 예시가 맨 끝으로 이동된 텍스트
+    """
+    lines = answer_text.split('\n')
+    main_content = []
+    code_blocks = []
+    in_code_block = False
+    
+    for line in lines:
+        if '```' in line:
+            in_code_block = not in_code_block
+            code_blocks.append(line)
+        elif in_code_block:
+            code_blocks.append(line)
+        elif '예시:' in line:
+            continue  # 중간의 '예시:' 제목 제거
+        else:
+            if not in_code_block and not code_blocks:
+                main_content.append(line)
+    
+    main_text = '\n'.join(main_content).strip()
+    
+    # 코드블록이 있으면 맨 끝에 추가
+    if code_blocks:
+        code_text = '\n'.join(code_blocks)
+        return f"{main_text}\n\n예시:\n{code_text}"
+    
+    return main_text
+
+
+def _format_paragraphs(answer_text: str) -> str:
+    """
+    문단 형식 정리 - 연속 공백줄 통일, 문단 내 줄바꿈 제거
+    
+    Args:
+        answer_text: 원본 답변 텍스트
+        
+    Returns:
+        str: 형식이 정리된 텍스트
+    """
+    # 연속된 공백줄을 2개로 통일
+    text = re.sub(r'\n{3,}', '\n\n', answer_text)
+    
+    # 문단 분리
+    paragraphs = text.split('\n\n')
+    cleaned_paragraphs = []
+    
+    for para in paragraphs:
+        # 코드블록은 건드리지 않음
+        if '```' in para:
+            cleaned_paragraphs.append(para)
+            continue
+        
+        # 문단 내 불필요한 줄바꿈 제거
+        cleaned = re.sub(r'\n(?!\n)', ' ', para.strip())
+        cleaned = re.sub(r'\s+', ' ', cleaned)  # 연속 공백 제거
+        
+        if cleaned:
+            cleaned_paragraphs.append(cleaned)
+    
+    result = '\n\n'.join(cleaned_paragraphs).strip()
+    
+    # 중복된 '예시:' 제거
+    result = re.sub(r'(예시:\s*\n?){2,}', '예시:\n', result)
+    
+    return result
+
 
 def _strip_existing_sources(answer_text: str) -> str:
     """Remove existing reference markers and emojis if present."""
@@ -1132,18 +1200,25 @@ def answer_grading_node(state):
     # 출처 제거한 답변만 평가
     answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
-    prompt = f"""다음 답변이 질문에 유용한지 판단하세요.
+    prompt = f"""다음 답변이 질문에 실질적으로 도움이 되는지 평가하세요.
 
 질문: {question}
 
 답변: {answer_only}
 
-이 답변이 질문에 충분히 답변합니까->
+평가 기준:
+✅ USEFUL - 다음 중 하나라도 해당:
+  - 질문에 직접적인 답변을 제공함
+  - 구체적인 정보나 예시를 포함함
+  - 실행 가능한 가이드를 제공함
+  - 라이브러리/도구 이름과 간단한 설명이 있음
 
-- USEFUL: 질문에 충분히 답변함
-- NOT_USEFUL: 질문에 답변하지 못함
+❌ NOT_USEFUL - 다음 모두 해당:
+  - 질문과 완전히 무관한 내용
+  - 추상적이거나 막연한 답변만 있음
+  - "알 수 없다" 또는 "정보가 없다"는 내용
 
-단어 하나만 답변하세요 (USEFUL, NOT_USEFUL):"""
+한 단어만 답변하세요 (USEFUL 또는 NOT_USEFUL):"""
 
     try:
         response = resources.llm_client.chat.completions.create(
@@ -1421,8 +1496,9 @@ def personalize_response_node(state: RAGState) -> RAGState:
             else:
                 items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
 
+            # 이모지 없이 자연스러운 메시지 (일관성 유지)
             reminder_message = (
-                f"\n\n💡 **참고**: 이전에 관심을 보이셨던 {items_text}도 "
+                f"\n\n**참고**: 이전에 관심을 보이셨던 {items_text}도 "
                 f"함께 확인해보시면 도움이 될 수 있습니다."
             )
 

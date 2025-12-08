@@ -130,18 +130,11 @@ def check_hallucination_and_usefulness(
         return "answer_grading"
 
 
-def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
+def grade_generation_usefulness(state: RAGState) -> Literal["personalize", "websearch", "end"]:
     """
-    Decide whether to end or try websearch based on usefulness grading.
-    """
-    from .config import get_config
-
-    answer_usefulness = state["answer_usefulness"]
-def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
-    """
-    답변 유용성 평가 이후 종료 또는 웹 검색 결정
+    답변 유용성 평가 이후 개인화/웹 검색/종료 결정
     
-    - useful: 종료
+    - useful: 개인화로 진행 (또는 종료)
     - not useful: 웹서치 재시도 (최대 max_retries까지만)
     """
     from .config import get_config
@@ -151,10 +144,10 @@ def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     config = get_config()
 
     if answer_usefulness == "useful":
-        logger.info("[Decision] 답변 유용 → 종료")
-        return "end"
+        logger.info("[Decision] 답변 유용 → 개인화 단계로")
+        return "personalize"
     
-    # 웹서치 카운트 기반 제한 (max_retries 대신)
+    # 웹서치 카운트 기반 제한
     if web_search_count >= config.max_retries:
         logger.warning(f"[Decision] 웹서치 최대 횟수({config.max_retries}) 도달 → 강제 종료")
         return "end"
@@ -255,13 +248,8 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     # Web Search → Generate
     workflow.add_edge("web_search", "generate")
 
-    # Generate → 다음 노드 (개인화 여부에 따라 분기)
-    if enable_personalization:
-        workflow.add_edge("generate", "personalize_response")
-        workflow.add_edge("personalize_response", "suggest_related_questions")
-        workflow.add_edge("suggest_related_questions", "hallucination_check")
-    else:
-        workflow.add_edge("generate", "hallucination_check")
+    # Generate → Hallucination Check (항상)
+    workflow.add_edge("generate", "hallucination_check")
 
     # Hallucination Check → Answer Grading / WebSearch / Retry Generate
     workflow.add_conditional_edges(
@@ -274,15 +262,21 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
         },
     )
 
-    # Answer Grading → END / WebSearch
+    # Answer Grading → Personalize / WebSearch / END
     workflow.add_conditional_edges(
         "answer_grading",
         grade_generation_usefulness,
         {
-            "end": END,
+            "personalize": "personalize_response" if enable_personalization else END,
             "websearch": "web_search",
+            "end": END,
         },
     )
+
+    # Personalize Response → Suggest Questions (개인화 활성화 시)
+    if enable_personalization:
+        workflow.add_edge("personalize_response", "suggest_related_questions")
+        workflow.add_edge("suggest_related_questions", END)
 
     app = workflow.compile()
     logger.info(f"✓ Adaptive RAG graph created successfully (personalization={enable_personalization})")

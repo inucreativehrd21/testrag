@@ -29,6 +29,7 @@ retrieval:
   # Reranking Configuration
   dense_top_k: 25          # Legacy parameter (not used in hybrid mode)
   rerank_top_k: 10         # Optimized: 20% of hybrid_top_k (data-driven)
+  rerank_stage2_skip_threshold: 4  # Stage2 스킵 임계값 (후보가 이 값 이하면 stage2 생략)
 
   rerankers:
     stage1:
