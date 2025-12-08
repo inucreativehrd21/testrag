@@ -115,7 +115,6 @@ def check_hallucination_and_usefulness(
 
 
 def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
-def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     """
     답변 유용성 평가 이후 종료 또는 웹 검색 결정
     """
