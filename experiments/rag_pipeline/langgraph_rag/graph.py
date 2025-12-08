@@ -81,11 +81,13 @@ def decide_to_generate_or_transform(
 
 
 
+
+
 def check_hallucination_and_usefulness(
     state: RAGState,
 ) -> Literal["answer_grading", "websearch", "retry_generate"]:
     """
-    ?? ?? ??? ?? ?? ??
+    Decide next step after hallucination check.
     """
     from .config import get_config
 
@@ -94,25 +96,43 @@ def check_hallucination_and_usefulness(
     config = get_config()
 
     if hallucination_grade == "supported":
-        logger.info("[Decision] ?? ?? ? answer_grading")
+        logger.info("[Decision] hallucination cleared -> answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        # ?? ???? ??? ?? ??? ????? ??? ??
-        if state.get("web_search_done") or not state.get("web_search_needed", True):
-            logger.warning("[Decision] ?? ??? ?? ? answer_grading")
+        # Allow at most one websearch
+        if state.get("web_search_done") or retry_count >= 1 or not state.get("web_search_needed", True):
+            logger.warning("[Decision] websearch already done/max -> answer_grading")
             return "answer_grading"
-        # ??? 1? ?? ???? ??
-        if retry_count >= config.max_retries:
-            logger.warning("[Decision] ?? ??? ?? ? answer_grading")
-            return "answer_grading"
-
-        logger.warning("[Decision] ?? ?? ? ??? ??")
+        logger.warning("[Decision] hallucination detected -> websearch once")
         state["retry_count"] += 1
         return "websearch"
     else:
-        logger.info("[Decision] ?? ??? ? answer_grading")
+        logger.info("[Decision] hallucination uncertain -> answer_grading")
         return "answer_grading"
 
+
+def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
+    """
+    Decide whether to end or try websearch based on usefulness grading.
+    """
+    from .config import get_config
+
+    answer_usefulness = state["answer_usefulness"]
+    retry_count = state["retry_count"]
+    config = get_config()
+
+    if answer_usefulness == "useful":
+        logger.info("[Decision] answer useful -> end")
+        return "end"
+    elif retry_count < config.max_retries:
+        logger.warning(
+            f"[Decision] answer not useful -> websearch retry ({retry_count + 1}/{config.max_retries})"
+        )
+        state["retry_count"] += 1
+        return "websearch"
+    else:
+        logger.warning("[Decision] max retries reached -> end")
+        return "end"
 
 def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     """

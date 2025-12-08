@@ -783,9 +783,11 @@ def generate_node(state):
             "content": (
                 f"질문: {question}\n\n"
                 f"{history_text}문서:\n{context_block}\n\n"
-                "답변: 문서를 근거로 자연스러운 문단형 답변을 작성하세요. "
-                "본문에는 출처/URL을 넣지 말고, 필요하면 예시나 코드를 별도 문단/코드블록으로 구분해 주세요. "
-                "불릿은 꼭 필요할 때만 간결하게 사용하세요."
+                "형식 요구:\n"
+                "1) 핵심 답변: 자연스러운 한두 단락으로 핵심만 정리.\n"
+                "2) 예시가 있으면 '예시:' 제목 뒤에 코드블록 또는 짧은 문장으로 분리.\n"
+                "3) 본문에 출처/URL을 넣지 말 것. 불릿은 꼭 필요할 때만 간결하게 사용.\n"
+                "4) 지나치게 길게 쓰지 말 것."
             ),
         },
     ]
@@ -806,6 +808,13 @@ def generate_node(state):
 
         # Strip prior reference sections and tool mentions
         answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
+
+        # Ensure example/code block is visually separated and labeled
+        if "```" in answer_text:
+            if "예시" not in answer_text:
+                answer_text = answer_text.replace("```", "예시:\n```", 1)
+            if "\n\n```" not in answer_text:
+                answer_text = answer_text.replace("```", "\n\n```", 1)
 
         # 출처는 본문에 포함하지 않음 (별도 메타데이터 사용)
         state["generation"] = answer_text
@@ -830,12 +839,11 @@ def _strip_existing_sources(answer_text: str) -> str:
 
 def _clean_tool_mentions(answer_text: str) -> str:
     """
-    본문에서 tavily/websearch 등 툴 이름을 제거해 답변을 자연스럽게 만든다.
+    Remove tool mentions (tavily/websearch) from generated text.
     """
     cleaned = answer_text
     for token in ["tavily", "websearch", "web search", "Tavily", "WebSearch"]:
-        cleaned = re.sub(rf"\(->\b{re.escape(token)}\b\)->", "", cleaned, flags=re.IGNORECASE)
-    # Collapse double spaces left by removals
+        cleaned = re.sub(rf"\\b{re.escape(token)}\\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
     return cleaned.strip()
 
@@ -845,8 +853,8 @@ def _clean_tool_mentions(answer_text: str) -> str:
 
 
 def hallucination_check_node(state):
-    """->-> ->-> (->->-> ->->)"""
-    logger.info("[HallucinationCheck] ->-> (->-> ->->)")
+    """Hallucination check (conditional)."""
+    logger.info("[HallucinationCheck] start")
     start_time = time.time()
 
     resources = get_resources()
@@ -854,33 +862,39 @@ def hallucination_check_node(state):
     generation = state["generation"]
     documents = state["final_documents"]
 
-    # fast-path ->-> ->-> ->->-> ->-> -> ->->
+    # fast-path or already web-searched
     if state.get("fast_path") or state.get("web_search_done"):
         state["hallucination_grade"] = "supported"
         state["web_search_needed"] = False
         return add_to_history(state, "hallucination_check")
 
     if not documents:
-        logger.warning("[HallucinationCheck] ->-> ->->, ->-> ->->")
+        logger.warning("[HallucinationCheck] no documents, skip")
         state["hallucination_grade"] = "not_sure"
         return add_to_history(state, "hallucination_check")
 
-    # ->-> ->->-> ->->
+    # Clean answer text
     answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
-    # Step 1: keyword overlap ->-> ->->
+    # Step 1: keyword overlap quick check
     keyword_overlap = _calculate_keyword_overlap(answer_only, documents)
 
-    # ->->->-> ->-> ->->-> ->-> not_supported ->-> (->->-> 1->-> ->->)
-    if keyword_overlap < 0.20:
+    # If overlap is high, accept
+    if keyword_overlap >= 0.35:
+        state["hallucination_grade"] = "supported"
+        state["web_search_needed"] = False
+        return add_to_history(state, "hallucination_check")
+
+    # If very low, allow a single websearch
+    if keyword_overlap < 0.10:
         state["hallucination_grade"] = "not_supported"
         state["web_search_needed"] = not state.get("web_search_done", False)
         return add_to_history(state, "hallucination_check")
 
-    # Step 2: context ->->
+    # Mid overlap: run structured LLM check
     context_text = _smart_truncate_documents(documents, max_tokens=3000)
 
-    # Step 3: LLM structured output->-> ->-> (->->->-> ->->-> ->-> ->->)
+    # LLM structured output
     system_prompt = """You are a fact-checker. Evaluate if the answer is fully grounded in the provided documents.
 
 Provide:
@@ -896,7 +910,7 @@ Be strict: if ANY claim lacks evidence, mark as NOT_SUPPORTED."""
 Documents:
 {context_text}
 
-Is the answer fully supported by the documents->"""
+Is the answer fully supported by the documents?"""
 
     try:
         structured_llm = resources.langchain_llm_fast.with_structured_output(HallucinationGrade)
@@ -933,12 +947,12 @@ Is the answer fully supported by the documents->"""
         logger.info(f"[HallucinationCheck] Reasoning: {result.reasoning}")
 
     except Exception as e:
-        logger.error(f"[HallucinationCheck] ->->: {e}", exc_info=True)
+        logger.error(f"[HallucinationCheck] error: {e}", exc_info=True)
         state["hallucination_grade"] = "not_sure"
         state["web_search_needed"] = False
 
     elapsed = time.time() - start_time
-    logger.info(f"[HallucinationCheck] ->-> ({elapsed:.2f}s)")
+    logger.info(f"[HallucinationCheck] done ({elapsed:.2f}s)")
 
     return add_to_history(state, "hallucination_check")
 
