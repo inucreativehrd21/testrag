@@ -1188,6 +1188,12 @@ def web_search_node(state):
         state["final_metadatas"] = []
         return add_to_history(state, "web_search")
 
+    # 웹 검색 카운트 증가
+    web_search_count = state.get("web_search_count", 0)
+    state["web_search_count"] = web_search_count + 1
+    
+    logger.info(f"[WebSearch] 웹 검색 실행 (횟수: {state['web_search_count']})")
+
     # 웹 검색 실행
     documents, metadatas = web_search_tool.search_with_metadata(question)
 

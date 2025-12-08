@@ -137,44 +137,32 @@ def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     from .config import get_config
 
     answer_usefulness = state["answer_usefulness"]
-    retry_count = state["retry_count"]
-    config = get_config()
-
-    if answer_usefulness == "useful":
-        logger.info("[Decision] answer useful -> end")
-        return "end"
-    elif retry_count < config.max_retries:
-        logger.warning(
-            f"[Decision] answer not useful -> websearch retry ({retry_count + 1}/{config.max_retries})"
-        )
-        state["retry_count"] += 1
-        return "websearch"
-    else:
-        logger.warning("[Decision] max retries reached -> end")
-        return "end"
-
 def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     """
     답변 유용성 평가 이후 종료 또는 웹 검색 결정
+    
+    - useful: 종료
+    - not useful: 웹서치 재시도 (최대 max_retries까지만)
     """
     from .config import get_config
 
     answer_usefulness = state["answer_usefulness"]
-    retry_count = state["retry_count"]
+    web_search_count = state.get("web_search_count", 0)
     config = get_config()
 
     if answer_usefulness == "useful":
         logger.info("[Decision] 답변 유용 → 종료")
         return "end"
-    elif retry_count < config.max_retries:
-        logger.warning(
-            f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 (시도 {retry_count + 1}/{config.max_retries})"
-        )
-        state["retry_count"] += 1
-        return "websearch"
-    else:
-        logger.warning("[Decision] 최대 재시도 초과 → 종료")
+    
+    # 웹서치 카운트 기반 제한 (max_retries 대신)
+    if web_search_count >= config.max_retries:
+        logger.warning(f"[Decision] 웹서치 최대 횟수({config.max_retries}) 도달 → 강제 종료")
         return "end"
+    
+    logger.warning(
+        f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 ({web_search_count + 1}/{config.max_retries})"
+    )
+    return "websearch"
 
 
 # ========== LangGraph 구성 함수 ==========
