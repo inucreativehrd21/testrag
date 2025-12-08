@@ -260,7 +260,6 @@ def query_router_node(state: RAGState) -> RAGState:
 
 
 def hybrid_retrieve_node(state: RAGState) -> RAGState:
-def hybrid_retrieve_node(state: RAGState) -> RAGState:
     """
     Hybrid Search (Dense + Sparse + RRF Fusion)
 
@@ -951,7 +950,6 @@ Is the answer fully supported by the documents->"""
 
 
 def _calculate_keyword_overlap(answer: str, documents: List[str]) -> float:
-def _calculate_keyword_overlap(answer: str, documents: List[str]) -> float:
     """
     간단한 keyword overlap 계산 (답변과 문서 간의 어휘 중복도)
 
@@ -1348,16 +1346,22 @@ def personalize_response_node(state: RAGState) -> RAGState:
     return add_to_history(state, "personalize_response")
 
 
-# ========== 노드 13: Suggest Related Questions ==========
+
+
+
+# ========== ?? 13: Suggest Related Questions ==========
+
+
+
 
 
 
 def suggest_related_questions_node(state: RAGState) -> RAGState:
-    """->-> ->-> ->->"""
-    logger.info("[SuggestQuestions] ->-> ->-> ->-> ->->")
+    """Generate up to 3 related follow-up questions."""
+    logger.info("[SuggestQuestions] start")
     start_time = time.time()
 
-    # fast-path ->-> ->->-> ->->-> -> ->->
+    # Skip when fast-path or personalization disabled
     if state.get("fast_path") or state.get("enable_personalization") is False:
         state["related_questions"] = []
         return add_to_history(state, "suggest_related_questions")
@@ -1368,44 +1372,34 @@ def suggest_related_questions_node(state: RAGState) -> RAGState:
     generation = state["generation"]
     user_context = state.get("user_context", {})
 
-    # ->->-> ->->->-> ->->
+    # Build short context summary
     context_summary = ""
     if user_context:
         learning_goals = user_context.get("learning_goals", "")
         interested_topics = user_context.get("interested_topics", "")
         if learning_goals:
-            context_summary += f"->-> ->->: {learning_goals}
-"
+            context_summary += f"Goals: {learning_goals}\n"
         if interested_topics:
-            context_summary += f"->->->->: {interested_topics}
-"
+            context_summary += f"Interests: {interested_topics}\n"
 
-    # ->->->-> ->-> ->->
+    # Trim answer for prompt
     answer_only = _strip_existing_sources(generation)
     if len(answer_only) > 500:
         answer_only = answer_only[:500] + "..."
 
-    system_prompt = """->->-> ->-> ->->->->->->. ->->->-> ->-> ->->-> ->->-> ->->, 
-->->->-> ->->-> ->->->-> ->-> ->-> ->-> 3->-> ->->->->->->.
+    system_prompt = """You are a helpful tutor. Given the user's question and answer, suggest 3 natural follow-up questions.
+- Keep each as a clear one-line question
+- No numbering, separate by newlines
+- Align with the current context and user interests"""
 
-->-> ->->->:
-- ->-> ->->-> ->->->-> ->->->->-> ->->->-> ->->
-- ->-> ->-> ->->-> -> ->-> ->->
-- ->-> ->-> ->->->->->-> ->->"""
+    user_prompt = f"""Question: {question}
 
-    user_prompt = f"""->-> ->->: {question}
-
-->-> ->->: {answer_only}"""
+Answer summary: {answer_only}"""
 
     if context_summary:
-        user_prompt += f"
+        user_prompt += f"\\n\\nUser info:\\n{context_summary}"
 
-->->-> ->->:
-{context_summary}"
-
-    user_prompt += "
-
-->-> ->-> 3->-> ->->:"
+    user_prompt += "\\n\\nSuggest 3 related questions:"
 
     try:
         response = resources.llm_client.chat.completions.create(
@@ -1422,638 +1416,26 @@ def suggest_related_questions_node(state: RAGState) -> RAGState:
 
         suggestions = [
             line.strip().lstrip("0123456789.-) ").strip()
-            for line in suggestions_text.split("
-")
+            for line in suggestions_text.split("\n")
             if line.strip() and len(line.strip()) > 8
         ]
 
-        suggestions = suggestions[:3]
-
-        state["related_questions"] = suggestions
-        logger.info(f"[SuggestQuestions] {len(suggestions)}-> ->-> ->-> ->->")
+        state["related_questions"] = suggestions[:3]
+        logger.info(f"[SuggestQuestions] {len(state['related_questions'])} suggestions done")
 
     except Exception as e:
-        logger.error(f"[SuggestQuestions] ->->: {e}")
+        logger.error(f"[SuggestQuestions] failed: {e}")
         state["related_questions"] = []
 
     elapsed = time.time() - start_time
-    logger.info(f"[SuggestQuestions] ->-> ({elapsed:.2f}s)")
+    logger.info(f"[SuggestQuestions] done ({elapsed:.2f}s)")
 
     return add_to_history(state, "suggest_related_questions")
 
 
 def _strip_existing_sources(answer_text: str) -> str:
-def _strip_existing_sources(answer_text: str) -> str:
-    """기존 출처 섹션 제거"""
-    marker = "📚 참고"
+    """Strip existing reference markers if present."""
+    marker = "References:"
     if marker in answer_text:
         return answer_text.split(marker)[0].rstrip()
     return answer_text
-
-
-def _clean_tool_mentions(answer_text: str) -> str:
-    """
-    본문에서 tavily/websearch 등 툴 이름을 제거해 답변을 자연스럽게 만든다.
-    """
-    cleaned = answer_text
-    for token in ["tavily", "websearch", "web search", "Tavily", "WebSearch"]:
-        cleaned = re.sub(rf"\(->\b{re.escape(token)}\b\)->", "", cleaned, flags=re.IGNORECASE)
-    # Collapse double spaces left by removals
-    cleaned = re.sub(r"\s{2,}", " ", cleaned)
-    return cleaned.strip()
-
-
-# ========== 노드 8: Hallucination Check (개선 버전) ==========
-
-
-
-def hallucination_check_node(state):
-    """->-> ->-> (->->-> ->->)"""
-    logger.info("[HallucinationCheck] ->-> (->-> ->->)")
-    start_time = time.time()
-
-    resources = get_resources()
-
-    generation = state["generation"]
-    documents = state["final_documents"]
-
-    # fast-path ->-> ->-> ->->-> ->-> -> ->->
-    if state.get("fast_path") or state.get("web_search_done"):
-        state["hallucination_grade"] = "supported"
-        state["web_search_needed"] = False
-        return add_to_history(state, "hallucination_check")
-
-    if not documents:
-        logger.warning("[HallucinationCheck] ->-> ->->, ->-> ->->")
-        state["hallucination_grade"] = "not_sure"
-        return add_to_history(state, "hallucination_check")
-
-    # ->-> ->->-> ->->
-    answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
-
-    # Step 1: keyword overlap ->-> ->->
-    keyword_overlap = _calculate_keyword_overlap(answer_only, documents)
-
-    # ->->->-> ->-> ->->-> ->-> not_supported ->-> (->->-> 1->-> ->->)
-    if keyword_overlap < 0.20:
-        state["hallucination_grade"] = "not_supported"
-        state["web_search_needed"] = not state.get("web_search_done", False)
-        return add_to_history(state, "hallucination_check")
-
-    # Step 2: context ->->
-    context_text = _smart_truncate_documents(documents, max_tokens=3000)
-
-    # Step 3: LLM structured output->-> ->-> (->->->-> ->->-> ->-> ->->)
-    system_prompt = """You are a fact-checker. Evaluate if the answer is fully grounded in the provided documents.
-
-Provide:
-1. reasoning: Your judgment reasoning (2-3 sentences)
-2. grade: SUPPORTED / NOT_SUPPORTED / NOT_SURE
-3. confidence: Your confidence score (0.0 to 1.0)
-
-Be strict: if ANY claim lacks evidence, mark as NOT_SUPPORTED."""
-
-    user_prompt = f"""Answer:
-{answer_only}
-
-Documents:
-{context_text}
-
-Is the answer fully supported by the documents->"""
-
-    try:
-        structured_llm = resources.langchain_llm_fast.with_structured_output(HallucinationGrade)
-
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
-        ]
-
-        result: HallucinationGrade = structured_llm.invoke(messages)
-
-        # Confidence calibration (LLM confidence + keyword overlap)
-        calibrated_confidence = result.confidence * 0.7 + keyword_overlap * 0.3
-
-        if calibrated_confidence < 0.65 and result.grade.value == "supported":
-            logger.warning(
-                f"[HallucinationCheck] Low confidence ({calibrated_confidence:.2f}), keyword_overlap={keyword_overlap:.2%}"
-            )
-            if calibrated_confidence < 0.50:
-                result.grade = HallucinationType.NOT_SURE
-
-        state["hallucination_grade"] = result.grade.value
-
-        if result.grade.value == "not_supported":
-            state["web_search_needed"] = not state.get("web_search_done", False)
-        else:
-            state["web_search_needed"] = False
-
-        logger.info(
-            f"[HallucinationCheck] Grade={result.grade.value}, "
-            f"LLM_Conf={result.confidence:.2f}, Calibrated={calibrated_confidence:.2f}, "
-            f"Keyword_Overlap={keyword_overlap:.2%}"
-        )
-        logger.info(f"[HallucinationCheck] Reasoning: {result.reasoning}")
-
-    except Exception as e:
-        logger.error(f"[HallucinationCheck] ->->: {e}", exc_info=True)
-        state["hallucination_grade"] = "not_sure"
-        state["web_search_needed"] = False
-
-    elapsed = time.time() - start_time
-    logger.info(f"[HallucinationCheck] ->-> ({elapsed:.2f}s)")
-
-    return add_to_history(state, "hallucination_check")
-
-
-def _calculate_keyword_overlap(answer: str, documents: List[str]) -> float:
-def _calculate_keyword_overlap(answer: str, documents: List[str]) -> float:
-    """
-    간단한 keyword overlap 계산 (답변과 문서 간의 어휘 중복도)
-
-    Returns:
-        float: Overlap ratio (0.0 ~ 1.0)
-    """
-    import re
-
-    # 답변에서 키워드 추출 (2글자 이상, 알파벳/한글)
-    answer_words = set(re.findall(r'[a-zA-Z가-힣]{2,}', answer.lower()))
-
-    if not answer_words:
-        return 0.0
-
-    # 문서에서 키워드 추출
-    doc_text = " ".join(documents).lower()
-    doc_words = set(re.findall(r'[a-zA-Z가-힣]{2,}', doc_text))
-
-    # Overlap 계산
-    matching_words = answer_words.intersection(doc_words)
-    overlap_ratio = len(matching_words) / len(answer_words)
-
-    return overlap_ratio
-
-
-def _smart_truncate_documents(documents: List[str], max_tokens: int = 3000) -> str:
-    """
-    토큰 수 기반으로 문서를 스마트하게 truncate
-
-    Args:
-        documents: 문서 리스트
-        max_tokens: 최대 토큰 수
-
-    Returns:
-        str: Truncated된 문서 텍스트
-    """
-    try:
-        import tiktoken
-        enc = tiktoken.encoding_for_model("gpt-4o-mini")
-    except:
-        # tiktoken 없으면 문자 수 기반 fallback (대략 1 token = 4 chars)
-        max_chars = max_tokens * 4
-        combined = "\n\n".join(f"[Doc {i+1}]\n{doc}" for i, doc in enumerate(documents))
-        if len(combined) > max_chars:
-            return combined[:max_chars] + "\n... [truncated]"
-        return combined
-
-    result = []
-    total_tokens = 0
-
-    for i, doc in enumerate(documents):
-        doc_with_header = f"[Doc {i+1}]\n{doc}"
-        doc_tokens = len(enc.encode(doc_with_header))
-
-        if total_tokens + doc_tokens <= max_tokens:
-            result.append(doc_with_header)
-            total_tokens += doc_tokens
-        else:
-            # 남은 토큰으로 일부만 포함
-            remaining_tokens = max_tokens - total_tokens
-            if remaining_tokens > 50:  # 최소 50 토큰은 있어야 의미 있음
-                truncated_doc = enc.decode(enc.encode(doc)[:remaining_tokens])
-                result.append(f"[Doc {i+1}]\n{truncated_doc}... [truncated]")
-            break
-
-    return "\n\n".join(result)
-
-
-# ========== 노드 9: Answer Grading ==========
-
-def answer_grading_node(state):
-    """답변 품질 평가 (Self-RAG)"""
-    logger.info("[AnswerGrading] 답변 품질 평가 시작")
-    start_time = time.time()
-
-    resources = get_resources()
-    config = get_config()
-
-    question = state["question"]
-    generation = state["generation"]
-
-    # 출처 제거한 답변만 평가
-    answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
-
-    prompt = f"""다음 답변이 질문에 유용한지 판단하세요.
-
-질문: {question}
-
-답변: {answer_only}
-
-이 답변이 질문에 충분히 답변합니까->
-
-- USEFUL: 질문에 충분히 답변함
-- NOT_USEFUL: 질문에 답변하지 못함
-
-단어 하나만 답변하세요 (USEFUL, NOT_USEFUL):"""
-
-    try:
-        response = resources.llm_client.chat.completions.create(
-            model=config.context_quality_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=20,
-        )
-        label = response.choices[0].message.content.strip().upper()
-
-        if "USEFUL" in label and "NOT" not in label:
-            state["answer_usefulness"] = "useful"
-            logger.info("[AnswerGrading] 결과: USEFUL")
-        else:
-            state["answer_usefulness"] = "not_useful"
-            logger.warning("[AnswerGrading] 결과: NOT USEFUL")
-            state["web_search_needed"] = True
-
-    except Exception as e:
-        logger.error(f"[AnswerGrading] 실패: {e}")
-        state["answer_usefulness"] = "useful"  # 실패 시 긍정으로 가정
-
-    elapsed = time.time() - start_time
-    logger.info(f"[AnswerGrading] 완료 ({elapsed:.2f}s)")
-
-    return add_to_history(state, "answer_grading")
-
-
-# ========== 노드 10: Web Search ==========
-
-def web_search_node(state):
-    """웹 검색 fallback (Corrective RAG)"""
-    logger.info("[WebSearch] 웹 검색 시작")
-    start_time = time.time()
-
-    web_search_tool = get_web_search_tool()
-    question = state["question"]
-
-    if not web_search_tool.enabled:
-        logger.warning("[WebSearch] 웹 검색 비활성화됨")
-        state["final_documents"] = []
-        state["final_metadatas"] = []
-        return add_to_history(state, "web_search")
-
-    # 웹 검색 실행
-    documents, metadatas = web_search_tool.search_with_metadata(question)
-
-    state["final_documents"] = documents
-    state["final_metadatas"] = metadatas
-    state["web_search_done"] = True
-
-    elapsed = time.time() - start_time
-    logger.info(f"[WebSearch] {len(documents)}개 결과 검색 완료 ({elapsed:.2f}s)")
-
-    return add_to_history(state, "web_search")
-
-
-# ========== 개인화 및 질문 추천 노드 ==========
-
-# ========== 노드 11: Load User Context (개인화) ==========
-
-def load_user_context_node(state: RAGState) -> RAGState:
-    """
-    사용자 컨텍스트 로드 (개인화 - 간소화 버전)
-
-    Django에서 전달받은 user_context를 기반으로 현재 질문과 관련된
-    사용자 학습 목표 및 관심사를 분석합니다.
-
-    Note: 멘토님의 원본과 다르게 DB 쿼리를 하지 않고,
-          Django에서 이미 전달받은 user_context를 사용합니다.
-
-    Args:
-        state (RAGState): 현재 상태
-
-    Returns:
-        RAGState: 개인화 컨텍스트가 추가된 상태
-    """
-    logger.info("[LoadUserContext] 사용자 컨텍스트 로드 시작")
-    start_time = time.time()
-
-    user_id = state.get("user_id", "")
-    user_context = state.get("user_context", {})
-    question = state["question"]
-
-    if not user_id or not user_context:
-        logger.info("[LoadUserContext] user_id 또는 user_context 없음, 개인화 스킵")
-        return add_to_history(state, "load_user_context")
-
-    try:
-        # Django에서 전달받은 user_context 사용
-        # user_context 구조: {
-        #     "learning_goals": "Python 마스터하기, Django 학습",
-        #     "interested_topics": "웹 개발, API 설계, 데이터베이스",
-        # }
-        learning_goals = user_context.get("learning_goals", "")
-        interested_topics = user_context.get("interested_topics", "")
-
-        if not learning_goals and not interested_topics:
-            logger.info("[LoadUserContext] 사용자 학습 데이터 없음")
-            return add_to_history(state, "load_user_context")
-
-        # 질문에서 키워드 추출
-        question_keywords = _extract_keywords(question)
-
-        # 관련 항목 찾기
-        related_items = []
-        forgotten_items = []
-
-        # learning_goals 분석
-        if learning_goals:
-            goals_list = [g.strip() for g in learning_goals.split(",")]
-            for goal in goals_list:
-                if _is_related_to_question(goal, question_keywords, question):
-                    related_items.append({
-                        "type": "learning_goal",
-                        "content": goal,
-                    })
-                    # 질문에 직접 언급되지 않은 경우 상기 후보
-                    if not _is_mentioned_in_question(goal, question):
-                        forgotten_items.append({
-                            "type": "learning_goal",
-                            "content": goal,
-                        })
-
-        # interested_topics 분석
-        if interested_topics:
-            topics_list = [t.strip() for t in interested_topics.split(",")]
-            for topic in topics_list:
-                if _is_related_to_question(topic, question_keywords, question):
-                    related_items.append({
-                        "type": "interested_topic",
-                        "content": topic,
-                    })
-                    # 질문에 직접 언급되지 않은 경우 상기 후보
-                    if not _is_mentioned_in_question(topic, question):
-                        forgotten_items.append({
-                            "type": "interested_topic",
-                            "content": topic,
-                        })
-
-        state["related_selections"] = related_items
-        state["forgotten_candidates"] = forgotten_items
-
-        logger.info(
-            f"[LoadUserContext] 로드 완료 - "
-            f"관련: {len(related_items)}, "
-            f"상기 후보: {len(forgotten_items)}"
-        )
-
-    except Exception as e:
-        logger.error(f"[LoadUserContext] 실패: {e}")
-        state["related_selections"] = []
-        state["forgotten_candidates"] = []
-
-    elapsed = time.time() - start_time
-    logger.info(f"[LoadUserContext] 완료 ({elapsed:.2f}s)")
-
-    return add_to_history(state, "load_user_context")
-
-
-def _extract_keywords(text: str) -> List[str]:
-    """
-    텍스트에서 키워드 추출
-
-    Args:
-        text: 입력 텍스트
-
-    Returns:
-        List[str]: 추출된 키워드 목록
-    """
-    # 간단한 키워드 추출 (공백 기준 분리 + 불용어 제거)
-    stopwords = {"은", "는", "이", "가", "을", "를", "의", "에", "에서", "으로", "로", "와", "과", "하고", "있", "없", "수", "더", "등"}
-
-    words = text.lower().replace("->", "").replace(".", "").split()
-    keywords = [w for w in words if len(w) > 1 and w not in stopwords]
-
-    return keywords
-
-
-def _is_related_to_question(item: str, keywords: List[str], question: str) -> bool:
-    """
-    항목이 질문과 관련 있는지 판단
-
-    Args:
-        item: 사용자 학습 목표 또는 관심사
-        keywords: 질문 키워드 목록
-        question: 원본 질문
-
-    Returns:
-        bool: 관련 여부
-    """
-    item_lower = item.lower()
-    question_lower = question.lower()
-
-    # 직접 언급된 경우
-    if item_lower in question_lower:
-        return True
-
-    # 키워드 중 하나라도 포함되면 관련 있음
-    for keyword in keywords:
-        if keyword in item_lower:
-            return True
-
-    return False
-
-
-def _is_mentioned_in_question(item: str, question: str) -> bool:
-    """
-    항목이 질문에 직접 언급되었는지 확인
-
-    Args:
-        item: 사용자 학습 목표 또는 관심사
-        question: 원본 질문
-
-    Returns:
-        bool: 언급 여부
-    """
-    item_lower = item.lower()
-    question_lower = question.lower()
-
-    return item_lower in question_lower
-
-
-# ========== 노드 12: Personalize Response (개인화) ==========
-
-def personalize_response_node(state: RAGState) -> RAGState:
-    """
-    답변 개인화 (상기 메시지 주입)
-
-    생성된 답변에 사용자가 잊었을 수 있는 과거 학습 목표나 관심사를
-    상기시키는 메시지를 자연스럽게 추가합니다.
-
-    Args:
-        state (RAGState): 현재 상태
-
-    Returns:
-        RAGState: 개인화된 답변이 포함된 상태
-    """
-    logger.info("[PersonalizeResponse] 답변 개인화 시작")
-    start_time = time.time()
-
-    generation = state["generation"]
-    forgotten_candidates = state.get("forgotten_candidates", [])
-
-    if not forgotten_candidates:
-        logger.info("[PersonalizeResponse] 상기할 내용 없음, 스킵")
-        state["reminder_added"] = False
-        return add_to_history(state, "personalize_response")
-
-    try:
-        # 상기 메시지 생성 (최대 2개 항목만)
-        reminder_items = forgotten_candidates[:2]
-        reminder_parts = []
-
-        for item in reminder_items:
-            item_type = item.get("type", "")
-            content = item.get("content", "")
-
-            if content:
-                if item_type == "learning_goal":
-                    reminder_parts.append(f"'{content}' 학습 목표")
-                else:
-                    reminder_parts.append(f"'{content}'")
-
-        if reminder_parts:
-            # 자연스러운 상기 메시지 구성
-            if len(reminder_parts) == 1:
-                items_text = reminder_parts[0]
-            else:
-                items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
-
-            reminder_message = (
-                f"\n\n💡 **참고**: 이전에 관심을 보이셨던 {items_text}도 "
-                f"함께 확인해보시면 도움이 될 수 있습니다."
-            )
-
-            # 출처 섹션 앞에 삽입
-            if "📚 참고:" in generation:
-                parts = generation.split("📚 참고:")
-                personalized_generation = parts[0].rstrip() + reminder_message + "\n\n📚 참고:" + parts[1]
-            else:
-                personalized_generation = generation + reminder_message
-
-            state["generation"] = personalized_generation
-            state["reminder_added"] = True
-
-            logger.info(f"[PersonalizeResponse] 상기 메시지 추가: {items_text}")
-        else:
-            state["reminder_added"] = False
-
-    except Exception as e:
-        logger.error(f"[PersonalizeResponse] 실패: {e}")
-        state["reminder_added"] = False
-
-    elapsed = time.time() - start_time
-    logger.info(f"[PersonalizeResponse] 완료 ({elapsed:.2f}s)")
-
-    return add_to_history(state, "personalize_response")
-
-
-# ========== 노드 13: Suggest Related Questions ==========
-
-def suggest_related_questions_node(state: RAGState) -> RAGState:
-    """
-    관련 질문 추천
-
-    현재 질문과 답변, 그리고 사용자 컨텍스트를 바탕으로
-    사용자가 다음에 할 수 있는 관련 질문 3개를 추천합니다.
-
-    Args:
-        state (RAGState): 현재 상태
-
-    Returns:
-        RAGState: 관련 질문 목록이 포함된 상태
-    """
-    logger.info("[SuggestQuestions] 관련 질문 추천 시작")
-    start_time = time.time()
-
-    resources = get_resources()
-
-    question = state["question"]
-    generation = state["generation"]
-    user_context = state.get("user_context", {})
-
-    # 사용자 컨텍스트 요약
-    context_summary = ""
-    if user_context:
-        learning_goals = user_context.get("learning_goals", "")
-        interested_topics = user_context.get("interested_topics", "")
-        if learning_goals:
-            context_summary += f"학습 목표: {learning_goals}\n"
-        if interested_topics:
-            context_summary += f"관심 주제: {interested_topics}\n"
-
-    # 답변에서 출처 제거
-    answer_only = _strip_existing_sources(generation)
-    if len(answer_only) > 500:
-        answer_only = answer_only[:500] + "..."
-
-    system_prompt = """당신은 학습 도우미입니다. 사용자의 현재 질문과 답변을 보고,
-자연스럽게 이어질 수 있는 관련 질문 3개를 추천하세요.
-
-추천 질문은:
-- 현재 질문에서 자연스럽게 파생되는 내용
-- 더 깊이 있는 이해를 돕는 내용
-- 실용적이고 구체적인 내용
-- 사용자의 학습 목표/관심사와 관련된 내용
-
-각 질문은 한 줄로 작성하고, 번호나 불릿 없이 줄바꿈으로만 구분하세요."""
-
-    user_prompt = f"""현재 질문: {question}
-
-답변 요약: {answer_only}"""
-
-    if context_summary:
-        user_prompt += f"\n\n사용자 정보:\n{context_summary}"
-
-    user_prompt += "\n\n관련 질문 3개를 추천해주세요 (각 질문을 줄바꿈으로 구분):"
-
-    try:
-        response = resources.llm_client.chat.completions.create(
-            model=resources.langchain_llm_fast.model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.7,
-            max_tokens=200,
-        )
-
-        suggestions_text = response.choices[0].message.content.strip()
-
-        # 줄바꿈으로 분리하고 정리
-        suggestions = [
-            line.strip().lstrip("0123456789.-) ").strip()
-            for line in suggestions_text.split("\n")
-            if line.strip() and len(line.strip()) > 10
-        ]
-
-        # 최대 3개만
-        suggestions = suggestions[:3]
-
-        state["related_questions"] = suggestions
-        logger.info(f"[SuggestQuestions] {len(suggestions)}개 질문 추천 완료")
-
-    except Exception as e:
-        logger.error(f"[SuggestQuestions] 실패: {e}")
-        state["related_questions"] = []
-
-    elapsed = time.time() - start_time
-    logger.info(f"[SuggestQuestions] 완료 ({elapsed:.2f}s)")
-
-    return add_to_history(state, "suggest_related_questions")
