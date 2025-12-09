@@ -53,6 +53,12 @@ from .tools import get_web_search_tool, get_rag_tools  # ### 수정: get_rag_too
 logger = logging.getLogger(__name__)
 
 
+def _increment_retry_count(state: RAGState) -> None:
+    """retry_count는 라우팅 함수 대신 실제 재시도 노드에서만 증가시킨다."""
+    config = get_config()
+    state["retry_count"] = min(state["retry_count"] + 1, config.max_retries)
+
+
 # ========== 전역 리소스 (싱글톤 패턴) ==========
 
 class RAGResources:
@@ -685,6 +691,8 @@ def transform_query_node(state):
     logger.info("[TransformQuery] 쿼리 재작성 시작")
     start_time = time.time()
 
+    _increment_retry_count(state)
+
     resources = get_resources()
     question = state["question"]
 
@@ -1004,6 +1012,8 @@ def web_search_node(state):
     """웹 검색 fallback (Corrective RAG)"""
     logger.info("[WebSearch] 웹 검색 시작")
     start_time = time.time()
+
+    _increment_retry_count(state)
 
     web_search_tool = get_web_search_tool()
     question = state["question"]

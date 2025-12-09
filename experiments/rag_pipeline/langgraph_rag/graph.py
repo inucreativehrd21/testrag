@@ -74,7 +74,6 @@ def decide_to_generate_or_transform(
         logger.info(
             f"[Decision] 문서 관련성 부족 → 쿼리 재작성 (시도 {retry_count + 1}/{config.max_retries})"
         )
-        state["retry_count"] += 1
         return "transform_query"
     else:
         logger.warning("[Decision] 최대 재시도 초과 → 웹 검색")
@@ -103,7 +102,6 @@ def check_hallucination_and_usefulness(
             return "answer_grading"
 
         logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
-        state["retry_count"] += 1
         return "websearch"
     else:
         logger.info("[Decision] 환각 불확실 → answer_grading")
@@ -127,7 +125,6 @@ def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
         logger.warning(
             f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 (시도 {retry_count + 1}/{config.max_retries})"
         )
-        state["retry_count"] += 1
         return "websearch"
     else:
         logger.warning("[Decision] 최대 재시도 초과 → 종료")
