@@ -79,8 +79,8 @@ def main():
     parser.add_argument(
         "--output",
         "-o",
-        default="rag_workflow3.png",
-        help="출력 PNG 파일 경로 (기본값: rag_workflow3.png)"
+        default="rag_workflow4.png",
+        help="출력 PNG 파일 경로 (기본값: rag_workflow4.png)"
     )
     parser.add_argument(
         "--no-personalization",
