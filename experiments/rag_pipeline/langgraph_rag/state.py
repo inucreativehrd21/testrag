@@ -145,6 +145,7 @@ class RAGState(TypedDict):
     related_selections: List[Dict[str, Any]]  # 현재 질문과 관련된 선택 항목
     forgotten_candidates: List[Dict[str, Any]]  # 사용자가 잊었을 가능성 있는 항목 (상기 후보)
     reminder_added: bool  # 상기 메시지 추가 여부
+    reminder_message: str  # 생성된 상기 메시지 (suggest_related_questions_node에서 생성)
     related_questions: List[str]  # 추천 관련 질문 (비동기로 생성)
     # NEW END - 개인화 필드
 
@@ -183,6 +184,7 @@ def create_initial_state(question: str, user_id: str = "", user_context: Dict[st
         "related_selections": [],
         "forgotten_candidates": [],
         "reminder_added": False,
+        "reminder_message": "",
         "related_questions": [],
         # NEW END - 개인화 초기값
     }

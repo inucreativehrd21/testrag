@@ -1362,24 +1362,63 @@ def personalize_response_node(state: RAGState) -> RAGState:
 # NEW END - 개인화 노드
 
 
-# ========== 노드 13: Suggest Related Questions (비동기 개인화) ==========
+# ========== 노드 13: Suggest Related Questions + Reminder (비동기 개인화 통합) ==========
 
 def suggest_related_questions_node(state: RAGState) -> RAGState:
     """
-    관련 질문 추천 (비동기 개인화)
+    관련 질문 추천 + 상기 메시지 생성 (비동기 개인화 통합)
 
-    현재 질문과 생성된 답변을 바탕으로
-    사용자가 이어서 물어볼 만한 관련 질문 3개를 추천합니다.
+    1. 사용자가 잊었을 수 있는 과거 선택 사항 상기 메시지 생성
+    2. 현재 질문과 생성된 답변을 바탕으로 관련 질문 3개 추천
 
     Args:
         state (RAGState): 현재 상태
 
     Returns:
-        RAGState: 관련 질문이 추가된 상태
+        RAGState: 관련 질문 및 상기 메시지가 추가된 상태
     """
-    logger.info("[SuggestQuestions] 관련 질문 추천 시작")
+    logger.info("[SuggestQuestions] 비동기 개인화 시작 (질문 추천 + 상기 메시지)")
     start_time = time.time()
 
+    # ========== Part 1: 상기 메시지 생성 (빠른 문자열 조작) ==========
+    forgotten_candidates = state.get("forgotten_candidates", [])
+    reminder_message = ""
+
+    if forgotten_candidates:
+        logger.info(f"[SuggestQuestions] 상기 메시지 생성 중 ({len(forgotten_candidates)}개 후보)")
+        try:
+            # 상기 메시지 생성 (최대 2개 항목만)
+            reminder_items = forgotten_candidates[:2]
+            reminder_parts = []
+
+            for item in reminder_items:
+                service_name = item.get("service_name", "")
+                selected_option = item.get("selected_option", "")
+
+                if service_name and selected_option:
+                    reminder_parts.append(f"'{service_name}'에서 '{selected_option}'")
+                elif service_name:
+                    reminder_parts.append(f"'{service_name}'")
+
+            if reminder_parts:
+                # 자연스러운 상기 메시지 구성
+                if len(reminder_parts) == 1:
+                    items_text = reminder_parts[0]
+                else:
+                    items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
+
+                reminder_message = (
+                    f"💡 고객님께서는 이전에 {items_text}을(를) "
+                    f"보셨는데요, 이 부분도 함께 확인해보시면 도움이 될 수 있습니다."
+                )
+
+                logger.info(f"[SuggestQuestions] 상기 메시지 생성 완료: {items_text}")
+        except Exception as e:
+            logger.error(f"[SuggestQuestions] 상기 메시지 생성 실패: {e}")
+
+    state["reminder_message"] = reminder_message
+
+    # ========== Part 2: 관련 질문 추천 (LLM 호출) ==========
     resources = get_resources()
 
     question = state["question"]

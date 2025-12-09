@@ -23,7 +23,6 @@ from .nodes import (
     web_search_node,
     # NEW START - 개인화 노드 import
     load_user_context_node,
-    personalize_response_node,
     suggest_related_questions_node,
     # NEW END - 개인화 노드 import
 )
@@ -171,7 +170,6 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     # 개인화 노드 등록 (enable_personalization=True일 때만)
     if enable_personalization:
         workflow.add_node("load_user_context", load_user_context_node)
-        workflow.add_node("personalize_response", personalize_response_node)
         workflow.add_node("suggest_related_questions", suggest_related_questions_node)
 
     # 시작점: intent classifier
@@ -231,12 +229,8 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     # Web Search → Generate
     workflow.add_edge("web_search", "generate")
 
-    # Generate → 다음 노드 (개인화 여부에 따라 분기)
-    if enable_personalization:
-        workflow.add_edge("generate", "personalize_response")
-        workflow.add_edge("personalize_response", "hallucination_check")
-    else:
-        workflow.add_edge("generate", "hallucination_check")
+    # Generate → Hallucination Check (개인화 노드 제거됨)
+    workflow.add_edge("generate", "hallucination_check")
 
     # Hallucination Check → Answer Grading / WebSearch / Retry Generate
     workflow.add_conditional_edges(
