@@ -60,23 +60,24 @@ def decide_to_generate_or_transform(
 ) -> Literal["transform_query", "generate", "websearch"]:
     """
     문서 관련성 평가 이후 다음 경로 결정
-    """
-    from .config import get_config
 
-    config = get_config()
+    수정된 로직:
+    - 문서 관련성이 높으면 generate
+    - 문서 관련성이 낮으면:
+      - retry_count가 0이면 쿼리 재작성 (1번만 시도)
+      - retry_count가 1 이상이면 바로 웹서치
+    """
     document_relevance = state["document_relevance"]
     retry_count = state["retry_count"]
 
     if document_relevance == "relevant":
         logger.info("[Decision] 문서 관련성 높음 → generate")
         return "generate"
-    elif retry_count < config.max_retries:
-        logger.info(
-            f"[Decision] 문서 관련성 부족 → 쿼리 재작성 (시도 {retry_count + 1}/{config.max_retries})"
-        )
+    elif retry_count == 0:
+        logger.info("[Decision] 문서 관련성 부족 → 쿼리 재작성 (1회)")
         return "transform_query"
     else:
-        logger.warning("[Decision] 최대 재시도 초과 → 웹 검색")
+        logger.warning("[Decision] 쿼리 재작성 후에도 관련성 부족 → 웹 검색")
         return "websearch"
 
 
@@ -85,24 +86,27 @@ def check_hallucination_and_usefulness(
 ) -> Literal["answer_grading", "websearch", "retry_generate"]:
     """
     환각 여부에 따라 다음 단계 결정
-    """
-    from .config import get_config
 
+    수정된 로직:
+    - 웹서치를 이미 수행했으면 환각이 있어도 answer_grading으로 이동
+    - 웹서치를 수행하지 않았고 환각이 있으면 웹서치로 이동
+    """
     hallucination_grade = state["hallucination_grade"]
-    retry_count = state["retry_count"]
-    config = get_config()
+    workflow_history = state.get("workflow_history", [])
+
+    # 웹서치를 이미 수행했는지 확인
+    web_search_done = "web_search" in workflow_history
 
     if hallucination_grade == "supported":
         logger.info("[Decision] 환각 없음 → answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        # 안전 가드: 최대 재시도 초과 시 루프 중단
-        if retry_count >= config.max_retries:
-            logger.warning("[Decision] 최대 재시도 초과 → 추가 검색 없이 종료 경로")
+        if web_search_done:
+            logger.warning("[Decision] 환각 발견했지만 웹서치 이미 수행됨 → answer_grading")
             return "answer_grading"
-
-        logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
-        return "websearch"
+        else:
+            logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
+            return "websearch"
     else:
         logger.info("[Decision] 환각 불확실 → answer_grading")
         return "answer_grading"
@@ -111,24 +115,29 @@ def check_hallucination_and_usefulness(
 def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     """
     답변 유용성 평가 이후 종료 또는 웹 검색 결정
-    """
-    from .config import get_config
 
+    수정된 로직:
+    - 답변이 유용하면 종료
+    - 답변이 유용하지 않으면:
+      - 웹서치를 이미 수행했으면 종료 (더 이상 재시도 안 함)
+      - 웹서치를 수행하지 않았으면 웹서치 진행
+    """
     answer_usefulness = state["answer_usefulness"]
-    retry_count = state["retry_count"]
-    config = get_config()
+    workflow_history = state.get("workflow_history", [])
+
+    # 웹서치를 이미 수행했는지 확인
+    web_search_done = "web_search" in workflow_history
 
     if answer_usefulness == "useful":
         logger.info("[Decision] 답변 유용 → 종료")
         return "end"
-    elif retry_count < config.max_retries:
-        logger.warning(
-            f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 (시도 {retry_count + 1}/{config.max_retries})"
-        )
-        return "websearch"
     else:
-        logger.warning("[Decision] 최대 재시도 초과 → 종료")
-        return "end"
+        if web_search_done:
+            logger.warning("[Decision] 답변 품질 부족하지만 웹서치 이미 수행됨 → 종료")
+            return "end"
+        else:
+            logger.warning("[Decision] 답변 품질 부족 → 웹 검색으로 재시도")
+            return "websearch"
 
 
 # ========== LangGraph 구성 함수 ==========

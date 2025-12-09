@@ -772,7 +772,45 @@ def generate_node(state):
         for i, (doc, meta) in enumerate(zip(documents, metadatas))
     )
 
-    system_content = resources.system_prompt + "\n\n규칙: 본문에 툴/출처명(tavily, websearch 등)을 넣지 말고, 출처는 마지막 '📚 참고' 섹션에만 표기하세요."
+    # 답변 형식 가이드 추가
+    format_guide = """
+답변 형식 규칙:
+1. 첫 1-3문장은 자연스럽게 이어지는 설명으로 시작 (bullet point 사용 금지)
+2. 세부 사항이나 목록은 그 다음에 bullet points(-)로 나열
+3. 코드 예시는 "예시:" 라벨을 명확히 붙이고 코드 블록으로 구분
+4. 본문에 툴/출처명(tavily, websearch 등) 절대 포함 금지
+5. 출처는 마지막 '📚 참고' 섹션에만 표기
+
+좋은 예시:
+\"\"\"
+파이썬 리스트는 여러 값을 하나의 변수에 저장할 수 있는 가변적인 자료형이에요. 대괄호([])로 만들고, 순서가 있으며 값의 변경이 자유롭죠.
+
+주요 특징:
+- 순서가 있어서 인덱스로 접근 가능
+- 값 변경, 추가, 삭제가 자유로움
+- 중복된 값 저장 가능
+- 다양한 자료형을 한 리스트에 저장 가능
+
+예시:
+```python
+fruits = ["apple", "banana", "cherry"]
+print(fruits[0])  # apple
+```
+\"\"\"
+
+나쁜 예시:
+\"\"\"
+파이썬 리스트는:
+- 여러 값을 저장
+- 대괄호로 만듦
+- 순서가 있음
+
+예시:
+fruits = ["apple", "banana"]
+\"\"\"
+"""
+
+    system_content = resources.system_prompt + format_guide
     user_content = f"질문: {question}\n\n컨텍스트:\n{context_block}"
 
     messages = [
@@ -1235,7 +1273,7 @@ def personalize_response_node(state: RAGState) -> RAGState:
 
             reminder_message = (
                 f"\n\n💡 **참고**: 고객님께서는 이전에 {items_text}을(를) "
-                f"선택하셨는데요, 이 부분도 함께 확인해보시면 도움이 될 수 있습니다."
+                f"보셨는데요, 이 부분도 함께 확인해보시면 도움이 될 수 있습니다."
             )
 
             # 출처 섹션 앞에 삽입
