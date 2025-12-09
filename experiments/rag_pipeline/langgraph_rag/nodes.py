@@ -623,21 +623,31 @@ def grade_documents_node(state):
 - PARTIAL: 질문과 관련된 정보 일부 포함
 - IRRELEVANT: 질문과 관련 없음"""
 
-    results = []
+    # 병렬 처리를 위한 메시지 리스트 준비
+    message_batches = []
     for doc in documents:
         doc_preview = doc[:800] if len(doc) > 800 else doc
         user_prompt = f"질문: {question}\n\n문서: {doc_preview}"
+        message_batches.append([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
 
-        try:
-            result: DocumentRelevance = structured_llm.invoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt),
-            ])
-            results.append(result.relevance)
-            logger.debug(f"[GradeDocuments] 문서 평가: {result.relevance.value}, 근거: {result.reasoning}")
-        except Exception as e:
-            logger.warning(f"문서 평가 실패: {e}, 기본값 PARTIAL 사용")
-            results.append(RelevanceType.PARTIAL)
+    # 병렬 처리 (LangChain batch 사용 - 10개 동시 요청)
+    try:
+        batch_results = structured_llm.batch(message_batches)
+        results = []
+        for result in batch_results:
+            if isinstance(result, DocumentRelevance):
+                results.append(result.relevance)
+                logger.debug(f"[GradeDocuments] 문서 평가: {result.relevance.value}, 근거: {result.reasoning}")
+            else:
+                logger.warning(f"예상치 못한 결과 타입, 기본값 PARTIAL 사용")
+                results.append(RelevanceType.PARTIAL)
+    except Exception as e:
+        logger.warning(f"배치 평가 실패: {e}, 모든 문서 PARTIAL 처리")
+        results = [RelevanceType.PARTIAL] * len(documents)
+
 
     # 결과 집계
     relevant_count = sum(
