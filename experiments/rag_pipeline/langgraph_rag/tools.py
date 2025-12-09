@@ -8,6 +8,10 @@ LangGraph RAG 외부 도구
 import os
 from typing import List, Dict, Any
 
+# ### 수정 시작 ###
+from langchain_core.tools import tool
+# ### 수정 완료 ###
+
 
 class WebSearchTool:
     """
@@ -187,3 +191,55 @@ def get_web_search_tool() -> WebSearchTool:
     if _web_search_tool is None:
         _web_search_tool = WebSearchTool()
     return _web_search_tool
+
+
+# ### 수정 시작 ###
+# ========== LangChain Tool (bind_tools용) ==========
+
+@tool(parse_docstring=True)
+def web_search(thought: str, query: str) -> str:
+    """
+    웹에서 최신 정보를 검색합니다. 로컬 문서에서 답변을 찾지 못했거나 최신 정보가 필요할 때 사용하세요.
+
+    Args:
+        thought: 웹 검색을 수행하는 이유 (1-2문장)
+        query: 검색할 쿼리
+
+    Returns:
+        검색 결과 텍스트
+    """
+    web_tool = get_web_search_tool()
+    if not web_tool.enabled:
+        return "웹 검색이 비활성화되어 있습니다."
+
+    documents = web_tool.search(query)
+    if not documents:
+        return "검색 결과가 없습니다."
+
+    return "\n\n---\n\n".join(documents)
+
+
+@tool(parse_docstring=True)
+def answer_directly(thought: str) -> str:
+    """
+    충분한 정보가 있어 바로 답변할 수 있을 때 호출합니다.
+    추가 검색 없이 현재 컨텍스트로 답변을 생성합니다.
+
+    Args:
+        thought: 바로 답변할 수 있는 이유 (1-2문장)
+
+    Returns:
+        빈 문자열 (답변은 generate 노드에서 생성)
+    """
+    return ""
+
+
+def get_rag_tools() -> List:
+    """
+    RAG 시스템에서 사용할 LangChain Tool 리스트 반환
+
+    Returns:
+        List: [web_search, answer_directly] 도구들
+    """
+    return [web_search, answer_directly]
+# ### 수정 완료 ###

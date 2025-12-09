@@ -21,8 +21,8 @@ __pycache__/
 *.log
 
 # Artifacts
-experiments/rag_pipeline/artifacts/chroma_db/*
-!experiments/rag_pipeline/artifacts/chroma_db/.gitkeep
+# experiments/rag_pipeline/artifacts/chroma_db/*
+# !experiments/rag_pipeline/artifacts/chroma_db/.gitkeep
 
 # OS
 .DS_Store

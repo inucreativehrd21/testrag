@@ -10,10 +10,11 @@ from typing import List, Dict, Any, TypedDict, Literal
 from pydantic import BaseModel, Field
 
 
-# ========== Pydantic Models (for Structured Output) ==========
+# ### 수정 시작 ###
+# ========== Pydantic 모델 (Structured Output용) ==========
 
 class IntentType(str, Enum):
-    """Question intent classification"""
+    """질문 의도 분류"""
     IN_SCOPE = "in_scope"
     GREETING = "greeting"
     CHITCHAT = "chitchat"
@@ -21,64 +22,64 @@ class IntentType(str, Enum):
 
 
 class IntentClassification(BaseModel):
-    """Intent classification result"""
-    reasoning: str = Field(description="Classification reasoning (1-2 sentences)")
-    intent: IntentType = Field(description="Classified intent")
+    """Intent 분류 결과"""
+    reasoning: str = Field(description="분류 근거 (1-2문장)")
+    intent: IntentType = Field(description="분류된 의도")
 
 
 class RelevanceType(str, Enum):
-    """Document relevance evaluation"""
+    """문서 관련성 평가"""
     RELEVANT = "relevant"
     PARTIAL = "partial"
     IRRELEVANT = "irrelevant"
 
 
 class DocumentRelevance(BaseModel):
-    """Single document relevance evaluation result"""
-    reasoning: str = Field(description="Evaluation reasoning")
-    relevance: RelevanceType = Field(description="Relevance evaluation")
+    """단일 문서 관련성 평가 결과"""
+    reasoning: str = Field(description="평가 근거")
+    relevance: RelevanceType = Field(description="관련성 평가")
 
 
 class QueryRewriteAction(str, Enum):
-    """Query rewrite action"""
+    """쿼리 재작성 액션"""
     PRESERVE = "preserve"
     REWRITE = "rewrite"
 
 
 class RewrittenQuery(BaseModel):
-    """Query rewrite result"""
-    reasoning: str = Field(description="Rewrite reasoning")
-    action: QueryRewriteAction = Field(description="Whether to rewrite")
-    rewritten_query: str = Field(description="Rewritten query (used only when action is rewrite)")
+    """쿼리 재작성 결과"""
+    reasoning: str = Field(description="재작성 근거")
+    action: QueryRewriteAction = Field(description="재작성 여부")
+    rewritten_query: str = Field(description="재작성된 쿼리 (action이 rewrite일 때만 사용)")
 
 
 class HallucinationType(str, Enum):
-    """Hallucination evaluation"""
+    """환각 여부 평가"""
     SUPPORTED = "supported"
     NOT_SUPPORTED = "not_supported"
     NOT_SURE = "not_sure"
 
 
 class HallucinationGrade(BaseModel):
-    """Hallucination verification result"""
-    reasoning: str = Field(description="Judgment reasoning")
-    grade: HallucinationType = Field(description="Hallucination status")
-    confidence: float = Field(description="Confidence score (0.0-1.0)", ge=0.0, le=1.0)
+    """환각 검증 결과"""
+    reasoning: str = Field(description="판단 근거")
+    grade: HallucinationType = Field(description="환각 여부")
 
 
 class UsefulnessType(str, Enum):
-    """Answer usefulness evaluation"""
+    """답변 유용성 평가"""
     USEFUL = "useful"
     NOT_USEFUL = "not_useful"
 
 
 class UsefulnessGrade(BaseModel):
-    """Answer usefulness evaluation result"""
-    reasoning: str = Field(description="Evaluation reasoning")
-    grade: UsefulnessType = Field(description="Usefulness evaluation")
+    """답변 유용성 평가 결과"""
+    reasoning: str = Field(description="평가 근거")
+    grade: UsefulnessType = Field(description="유용성 평가")
 
 
-# ========== RAG State Definition ==========
+# ### 수정 완료 ###
+
 
 class RAGState(TypedDict):
     """
@@ -102,16 +103,6 @@ class RAGState(TypedDict):
         answer_usefulness (str): 답변 유용성 평가 ("useful" | "not_useful" | "unknown")
         transformed_query (str): 변환된 쿼리
         workflow_history (List[str]): 실행된 노드 기록
-
-        # Personalization fields
-        user_id (str): 사용자 식별자
-        user_context (Dict[str, Any]): 사용자 컨텍스트 (Django에서 전달)
-        related_selections (List[Dict[str, Any]]): 현재 질문과 관련된 선택 항목
-        forgotten_candidates (List[Dict[str, Any]]): 사용자가 잊었을 가능성 있는 항목
-        reminder_added (bool): 상기 메시지 추가 여부
-
-        # Question suggestion field
-        related_questions (List[str]): 관련 질문 추천 리스트
     """
 
     # 입력
@@ -136,11 +127,7 @@ class RAGState(TypedDict):
 
     # 흐름 제어
     web_search_needed: bool
-    web_search_count: int  # 웹서치 실행 횟수 추적
-    skip_hallucination_check: bool  # 환각검사 스킵 플래그
     retry_count: int
-    fast_path: bool
-    web_search_done: bool
 
     # 평가 결과
     document_relevance: Literal["relevant", "not_relevant", "unknown"]
@@ -151,18 +138,15 @@ class RAGState(TypedDict):
     transformed_query: str
     workflow_history: List[str]
 
-    # Personalization fields
-    user_id: str
-    user_context: Dict[str, Any]
-    related_selections: List[Dict[str, Any]]
-    forgotten_candidates: List[Dict[str, Any]]
-    reminder_added: bool
-
-    # Question suggestion field
-    related_questions: List[str]
-
-    # Chat history
-    chat_history: List[Dict[str, Any]]
+    # NEW START - 개인화 필드
+    user_id: str  # 사용자 식별자
+    user_context: Dict[str, Any]  # Django에서 전달받은 사용자 컨텍스트
+    user_selections: List[Dict[str, Any]]  # 사용자 전체 선택 이력 (DB에서 로드)
+    related_selections: List[Dict[str, Any]]  # 현재 질문과 관련된 선택 항목
+    forgotten_candidates: List[Dict[str, Any]]  # 사용자가 잊었을 가능성 있는 항목 (상기 후보)
+    reminder_added: bool  # 상기 메시지 추가 여부
+    related_questions: List[str]  # 추천 관련 질문 (비동기로 생성)
+    # NEW END - 개인화 필드
 
 
 def create_initial_state(question: str, user_id: str = "", user_context: Dict[str, Any] = None) -> RAGState:
@@ -170,9 +154,9 @@ def create_initial_state(question: str, user_id: str = "", user_context: Dict[st
     Initialize the RAG state.
 
     Args:
-        question: User question
-        user_id: User identifier (for personalization)
-        user_context: User context from Django (learning_goals, interested_topics, etc.)
+        question: 사용자 질문
+        user_id: 사용자 식별자 (개인화에 사용)
+        user_context: Django에서 전달받은 사용자 컨텍스트 (learning_goals, interested_topics 등)
     """
     return {
         "question": question,
@@ -186,26 +170,21 @@ def create_initial_state(question: str, user_id: str = "", user_context: Dict[st
         "final_metadatas": [],
         "generation": "",
         "web_search_needed": False,
-        "web_search_count": 0,
-        "skip_hallucination_check": False,
         "retry_count": 0,
-        "fast_path": False,
-        "web_search_done": False,
         "document_relevance": "unknown",
         "hallucination_grade": "not_sure",
         "answer_usefulness": "unknown",
         "transformed_query": "",
         "workflow_history": [],
-        # Personalization initial values
+        # NEW START - 개인화 초기값
         "user_id": user_id,
         "user_context": user_context or {},
+        "user_selections": [],
         "related_selections": [],
         "forgotten_candidates": [],
         "reminder_added": False,
-        # Question suggestion initial value
         "related_questions": [],
-        # Chat history (optional, filled by caller)
-        "chat_history": [],
+        # NEW END - 개인화 초기값
     }
 
 

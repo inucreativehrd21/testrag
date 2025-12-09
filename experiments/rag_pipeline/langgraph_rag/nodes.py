@@ -15,12 +15,8 @@ LangGraph RAG 노드 함수
 - hallucination_check: 환각 검증
 - answer_grading: 답변 품질 평가
 - web_search: 웹 검색 fallback
-- load_user_context: 사용자 컨텍스트 로드 (개인화)
-- personalize_response: 답변 개인화
-- suggest_related_questions: 관련 질문 추천
 """
 
-import asyncio
 import logging
 import re
 import time
@@ -28,14 +24,18 @@ from typing import Dict, List, Tuple
 
 import chromadb
 from FlagEmbedding import BGEM3FlagModel, FlagReranker
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI, OpenAI
+
+# ### 수정 시작 ###
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
+# ### 수정 완료 ###
 
 from .config import get_config
 from .state import (
     RAGState,
     add_to_history,
+    # ### 수정 시작 ###
     IntentClassification,
     IntentType,
     DocumentRelevance,
@@ -46,8 +46,9 @@ from .state import (
     HallucinationType,
     UsefulnessGrade,
     UsefulnessType,
+    # ### 수정 완료 ###
 )
-from .tools import get_web_search_tool
+from .tools import get_web_search_tool, get_rag_tools  # ### 수정: get_rag_tools 추가 ###
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,8 @@ class RAGResources:
         self.llm_client = OpenAI()
         self.async_llm_client = AsyncOpenAI()
 
-        # LangChain LLM 클라이언트 (structured output용)
+        # ### 수정 시작 ###
+        # LangChain LLM 클라이언트 (structured output / bind_tools 용)
         self.langchain_llm = ChatOpenAI(
             model=config.llm_model,
             temperature=config.llm_temperature,
@@ -125,6 +127,7 @@ class RAGResources:
             model=config.context_quality_model,
             temperature=0,
         )
+        # ### 수정 완료 ###
 
         # 시스템 프롬프트
         system_prompt_path = config.artifacts_dir.parent / config.config["llm"]["system_prompt_path"]
@@ -148,9 +151,11 @@ def get_resources() -> RAGResources:
 # ========== 노드 0: Intent Classifier ==========
 
 
+# ### 수정 시작 ###
 def intent_classifier_node(state: RAGState) -> RAGState:
     """
     질문 의도를 분류해 in_scope가 아니면 초기에 종료시킨다.
+    with_structured_output을 사용하여 tool calling 방식으로 분류.
 
     Categories:
     - IN_SCOPE: 개발/프로그래밍/학습 관련
@@ -160,48 +165,34 @@ def intent_classifier_node(state: RAGState) -> RAGState:
     """
     logger.info("[Intent] 질문 의도 분류 시작")
     resources = get_resources()
-    config = get_config()
 
     question = state["question"]
     intent = "unknown"
 
-    # Fast heuristic: 개발/파이썬/깃 키워드가 보이면 바로 in_scope
-    lower_q = question.lower()
-    keyword_hits = ["python", "파이썬", "py ", "코딩", "개발", "git", "깃", "github", "gitlab"]
-    if any(k in lower_q for k in keyword_hits):
-        state["intent"] = "in_scope"
-        return add_to_history(state, "intent_classifier")
+    system_prompt = """당신은 질문 의도 분류기입니다. 사용자의 질문을 분석하여 의도를 분류하세요.
 
-    prompt = f"""다음 사용자의 질문이 개발/프로그래밍/학습 관련인지 분류하세요.
-반드시 아래 중 하나의 라벨만 답변:
-- IN_SCOPE: 개발, 프로그래밍, 소프트웨어 학습/디버깅/도구 사용
+분류 기준:
+- IN_SCOPE: 개발, 프로그래밍, 소프트웨어 학습/디버깅/도구 사용 관련
 - GREETING: 인사, 감사, 안부
 - CHITCHAT: 잡담/사적요청 (예: 아이스크림 사줘, 노래 추천)
-- NONSENSICAL: 무의미/스팸/의미 없는 입력
-모호하면 IN_SCOPE로 분류
+- NONSENSICAL: 무의미/스팸/의미 없는 입력"""
 
-질문: {question}
-
-정답 라벨 한 단어만:"""
+    user_prompt = f"질문: {question}"
 
     try:
-        response = resources.llm_client.chat.completions.create(
-            model=config.context_quality_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=4,
+        # with_structured_output으로 IntentClassification Pydantic 모델 강제
+        structured_llm = resources.langchain_llm_fast.with_structured_output(
+            IntentClassification,
+            method="function_calling",
         )
-        label = response.choices[0].message.content.strip().upper()
-        if "IN_SCOPE" in label:
-            intent = "in_scope"
-        elif "GREETING" in label:
-            intent = "greeting"
-        elif "CHITCHAT" in label:
-            intent = "chitchat"
-        elif "NON" in label:
-            intent = "nonsensical"
-        else:
-            intent = "in_scope"
+        result: IntentClassification = structured_llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+
+        intent = result.intent.value
+        logger.info(f"[Intent] 분류 결과: {intent}, 근거: {result.reasoning}")
+
     except Exception as e:
         logger.warning(f"[Intent] 분류 실패: {e}, 기본 in_scope로 처리")
         intent = "in_scope"
@@ -221,85 +212,56 @@ def intent_classifier_node(state: RAGState) -> RAGState:
         )
 
     return add_to_history(state, "intent_classifier")
+# ### 수정 완료 ###
 
 
 # ========== 노드 1: Query Router ==========
 
-
-
-# ========== ?? 1: Query Router ==========
-
-
-
-
-
-
 def query_router_node(state: RAGState) -> RAGState:
     """
-    LLM 기반 질문 라우팅
-    - vectorstore: 기존 문서로 답변 가능
-    - websearch: 최신 정보 필요
-    - direct: 검색 불필요 (인사/감사 등)
+    질문 분석 및 라우팅 결정
+
+    Args:
+        state (RAGState): 현재 상태
+
+    Returns:
+        RAGState: 라우팅 결정이 추가된 상태
+
+    라우팅 전략:
+    - "vectorstore": 벡터 검색 (기본)
+    - "websearch": 웹 검색 (최신 정보 필요)
+    - "direct": LLM만 사용 (검색 불필요)
+
+    현재 구현: 간단한 키워드 기반 라우팅
+    향후 개선: LLM 기반 분류
     """
-    logger.info(f"[QueryRouter] analyze: {state['question'][:100]}")
+    logger.info(f"[QueryRouter] 질문 분석: {state['question'][:100]}")
 
-    resources = get_resources()
-    config = get_config()
-    question = state["question"]
-    state["fast_path"] = False
+    question = state["question"].lower()
 
-    # 빠른 휴리스틱 체크 (간단한 경우만)
-    question_lower = question.lower()
-    if any(kw in question_lower for kw in ["안녕", "hello", "hi", "감사", "고마워", "thanks"]):
-        state["route"] = "direct"
-        logger.info("[QueryRouter] -> direct (greeting/thanks)")
-        return add_to_history(state, "query_router")
+    # 간단한 키워드 기반 라우팅
+    # TODO: LLM 기반 분류로 개선
+    if any(
+        keyword in question
+        for keyword in ["최근", "현재", "2024", "2025", "뉴스", "트렌드"]
+    ):
+        route = "websearch"
+        logger.info("[QueryRouter] → 웹 검색 (최신 정보)")
+    elif any(
+        keyword in question
+        for keyword in ["안녕", "hello", "hi", "감사", "고마워"]
+    ):
+        route = "direct"
+        logger.info("[QueryRouter] → 직접 답변 (검색 불필요)")
+    else:
+        route = "vectorstore"
+        logger.info("[QueryRouter] → 벡터 검색 (기본)")
 
-    # LLM 기반 분류
-    prompt = f"""다음 질문을 분석하여 적절한 검색 경로를 선택하세요.
-
-질문: {question}
-
-경로 선택 기준:
-1. VECTORSTORE: 기존 기술 문서/가이드로 답변 가능 (개념, 사용법, 문법 등)
-2. WEBSEARCH: 최신 정보 필요 (최근 업데이트, 뉴스, 릴리스 노트 등)
-3. FAST_VECTORSTORE: 간단한 정의/설명 질문 (빠른 응답 가능)
-
-판단 예시:
-- "Python에서 리스트 컴프리헨션이란?" → FAST_VECTORSTORE
-- "Git 브랜치 전략 종류" → VECTORSTORE
-- "Python 3.12 새로운 기능" → WEBSEARCH
-- "Django 최근 보안 업데이트" → WEBSEARCH
-
-한 단어만 답변하세요 (VECTORSTORE, WEBSEARCH, FAST_VECTORSTORE):"""
-
-    try:
-        response = resources.llm_client.chat.completions.create(
-            model=config.context_quality_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=20,
-        )
-        label = response.choices[0].message.content.strip().upper()
-
-        if "FAST" in label:
-            state["route"] = "vectorstore"
-            state["fast_path"] = True
-            logger.info("[QueryRouter] -> vectorstore (fast-path)")
-        elif "WEBSEARCH" in label:
-            state["route"] = "websearch"
-            logger.info("[QueryRouter] -> websearch (recency)")
-        else:
-            state["route"] = "vectorstore"
-            logger.info("[QueryRouter] -> vectorstore (default)")
-
-    except Exception as e:
-        logger.warning(f"[QueryRouter] LLM 분류 실패: {e}, 기본값 vectorstore 사용")
-        state["route"] = "vectorstore"
-
+    state["route"] = route
     return add_to_history(state, "query_router")
 
 
+# ========== 노드 2: Hybrid Retrieve ==========
 
 def hybrid_retrieve_node(state: RAGState) -> RAGState:
     """
@@ -566,17 +528,8 @@ def rerank_stage2_node(state: RAGState) -> RAGState:
         state["final_metadatas"] = []
         return add_to_history(state, "rerank_stage2")
 
-    # 작은 후보군은 stage2를 건너뛰고 바로 반환 (지연 최소화)
-    final_k = config.rerank_top_k
-    skip_threshold = config.config["retrieval"].get("rerank_stage2_skip_threshold", 4)
-    
-    if len(documents) <= max(skip_threshold, final_k):
-        state["final_documents"] = documents[:final_k] if final_k > 0 else documents
-        state["final_metadatas"] = metadatas[:final_k] if final_k > 0 else metadatas
-        logger.info(f"[Rerank Stage 2] 후보 {len(documents)}개 <= {skip_threshold} → stage2 스킵")
-        return add_to_history(state, "rerank_stage2")
-
     # 최종 top_k 선택
+    final_k = config.rerank_top_k
     reranked_docs = _rerank(question, documents, resources.reranker_stage2, final_k)
 
     # 메타데이터 매핑
@@ -639,8 +592,12 @@ def _rerank(
 
 # ========== 노드 5: Grade Documents ==========
 
+# ### 수정 시작 ###
 def grade_documents_node(state):
-    """문서 관련성 평가 (Corrective RAG)"""
+    """
+    문서 관련성 평가 (Corrective RAG)
+    with_structured_output을 사용하여 tool calling 방식으로 평가.
+    """
     logger.info("[GradeDocuments] 문서 관련성 평가 시작")
     start_time = time.time()
 
@@ -648,24 +605,43 @@ def grade_documents_node(state):
     question = state["question"]
     documents = state["final_documents"]
 
-    # Fast-path: 짧은 정의형이면 검증 생략
-    if state.get("fast_path"):
-        state["document_relevance"] = "relevant"
-        return add_to_history(state, "grade_documents")
-
     if not documents:
         logger.warning("[GradeDocuments] 문서 없음")
         state["document_relevance"] = "not_relevant"
         return add_to_history(state, "grade_documents")
 
-    # 병렬 평가 (비동기)
-    results = asyncio.run(
-        _evaluate_documents_async(resources.async_llm_client, question, documents)
+    # with_structured_output으로 DocumentRelevance 모델 사용
+    structured_llm = resources.langchain_llm_fast.with_structured_output(
+        DocumentRelevance,
+        method="function_calling",
     )
+
+    system_prompt = """당신은 문서 관련성 평가기입니다. 주어진 문서가 질문에 답하는 데 도움이 되는지 평가하세요.
+
+평가 기준:
+- RELEVANT: 질문에 직접 답할 수 있는 정보 포함
+- PARTIAL: 질문과 관련된 정보 일부 포함
+- IRRELEVANT: 질문과 관련 없음"""
+
+    results = []
+    for doc in documents:
+        doc_preview = doc[:800] if len(doc) > 800 else doc
+        user_prompt = f"질문: {question}\n\n문서: {doc_preview}"
+
+        try:
+            result: DocumentRelevance = structured_llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
+            ])
+            results.append(result.relevance)
+            logger.debug(f"[GradeDocuments] 문서 평가: {result.relevance.value}, 근거: {result.reasoning}")
+        except Exception as e:
+            logger.warning(f"문서 평가 실패: {e}, 기본값 PARTIAL 사용")
+            results.append(RelevanceType.PARTIAL)
 
     # 결과 집계
     relevant_count = sum(
-        1 for label in results if "RELEVANT" in label or "PARTIAL" in label
+        1 for r in results if r in (RelevanceType.RELEVANT, RelevanceType.PARTIAL)
     )
     relevance_ratio = relevant_count / len(results)
 
@@ -685,100 +661,58 @@ def grade_documents_node(state):
     logger.info(f"[GradeDocuments] 평가 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "grade_documents")
-
-
-async def _evaluate_documents_async(async_client, question, documents):
-    """문서 관련성 병렬 평가 (비동기)"""
-    config = get_config()
-
-    tasks = [
-        _evaluate_single_document(
-            async_client, question, doc, config.context_quality_model
-        )
-        for doc in documents
-    ]
-
-    results = await asyncio.gather(*tasks)
-    return results
-
-
-async def _evaluate_single_document(async_client, question, document, model):
-    """단일 문서 관련성 평가"""
-    doc_preview = document[:800] if len(document) > 800 else document
-
-    prompt = f"""질문: {question}
-
-문서: {doc_preview}
-
-이 문서가 질문에 답하는 데 도움이 됩니까->
-
-- RELEVANT: 질문에 직접 답할 수 있는 정보 포함
-- PARTIAL: 질문과 관련된 정보 일부 포함
-- IRRELEVANT: 질문과 관련 없음
-
-단어 하나만 답변하세요 (RELEVANT, PARTIAL, IRRELEVANT):"""
-
-    try:
-        response = await async_client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=10,
-        )
-        label = response.choices[0].message.content.strip().upper()
-        return label
-    except Exception as e:
-        logger.warning(f"문서 평가 실패: {e}, 기본값 PARTIAL 사용")
-        return "PARTIAL"
+# ### 수정 완료 ###
 
 
 # ========== 노드 6: Transform Query ==========
 
+# ### 수정 시작 ###
 def transform_query_node(state):
-    """쿼리 재작성 (Query Transformation)"""
+    """
+    쿼리 재작성 (Query Transformation)
+    with_structured_output을 사용하여 tool calling 방식으로 재작성.
+    """
     logger.info("[TransformQuery] 쿼리 재작성 시작")
     start_time = time.time()
 
     resources = get_resources()
-    config = get_config()
-
     question = state["question"]
 
-    prompt = f"""다음 질문을 검색 엔진에 최적화된 형태로 재작성하세요.
+    system_prompt = """당신은 검색 쿼리 최적화 전문가입니다.
+사용자의 질문을 분석하여 검색에 더 적합한 형태로 재작성해야 하는지 판단하세요.
 
-원본 질문: {question}
+판단 기준:
+- PRESERVE: 질문이 이미 충분히 구체적이고 검색에 적합함
+- REWRITE: 질문을 더 구체적이고 검색하기 좋은 형태로 재작성 필요
 
-재작성 전략:
-1. 핵심 키워드 추출 및 강조
-   - 기술명, 라이브러리명, 개념명 등을 명확히 표기
-   - 예: "파이썬에서 딕셔너리" → "Python dictionary 자료구조"
+재작성 지침 (REWRITE인 경우):
+- 핵심 키워드 강조
+- 구체적인 용어 사용
+- 검색에 도움이 되는 컨텍스트 추가"""
 
-2. 유사어 및 관련 용어 확장
-   - 동의어나 상위/하위 개념 포함
-   - 예: "오류" → "에러(error), 예외(exception)"
-
-3. 검색 컨텍스트 명시
-   - 사용 목적, 환경, 버전 등 구체화
-   - 예: "깃 사용법" → "Git 기본 명령어 사용법 (초보자용)"
-
-4. 불필요한 조사 및 구어체 제거
-   - 간결하고 명확한 형태로 변환
-
-재작성된 질문 (한 줄로):"""
+    user_prompt = f"원본 질문: {question}"
 
     try:
-        response = resources.llm_client.chat.completions.create(
-            model=config.context_quality_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=100,
+        structured_llm = resources.langchain_llm_fast.with_structured_output(
+            RewrittenQuery,
+            method="function_calling",
         )
-        transformed = response.choices[0].message.content.strip()
-        logger.info(f"[TransformQuery] 원본: {question}")
-        logger.info(f"[TransformQuery] 재작성: {transformed}")
+        result: RewrittenQuery = structured_llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
 
-        state["transformed_query"] = transformed
-        state["question"] = transformed  # 재작성된 쿼리로 교체
+        if result.action == QueryRewriteAction.REWRITE and result.rewritten_query.strip():
+            transformed = result.rewritten_query.strip()
+            logger.info(f"[TransformQuery] 원본: {question}")
+            logger.info(f"[TransformQuery] 재작성: {transformed}")
+            logger.info(f"[TransformQuery] 근거: {result.reasoning}")
+            state["transformed_query"] = transformed
+            state["question"] = transformed
+        else:
+            logger.info(f"[TransformQuery] 원본 유지: {question}")
+            logger.info(f"[TransformQuery] 근거: {result.reasoning}")
+            state["transformed_query"] = question
 
     except Exception as e:
         logger.error(f"[TransformQuery] 실패: {e}, 원본 쿼리 유지")
@@ -788,453 +722,259 @@ def transform_query_node(state):
     logger.info(f"[TransformQuery] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "transform_query")
+# ### 수정 완료 ###
 
 
 # ========== 노드 7: Generate ==========
 
+# ### 수정 시작 ###
 def generate_node(state):
-    """Generate answer with LLM (final step)."""
-    logger.info("[Generate] Start generation")
+    """
+    답변 생성 (LLM)
+    bind_tools를 사용하여 tool calling 방식으로 답변 생성.
+    LLM이 컨텍스트가 불충분하다고 판단하면 web_search 도구를 호출할 수 있음.
+    """
+    logger.info("[Generate] 답변 생성 시작")
     start_time = time.time()
 
     resources = get_resources()
-    config = get_config()
 
     question = state["question"]
     documents = state["final_documents"]
     metadatas = state["final_metadatas"]
 
     if not documents:
-        logger.warning("[Generate] No documents; returning fallback message")
-        state["generation"] = "관련 문서를 찾지 못했습니다."
+        logger.warning("[Generate] 문서 없음")
+        state["generation"] = "관련 문서를 찾지 못했습니다. 질문을 다르게 표현해보시겠어요?"
         return add_to_history(state, "generate")
 
-    # Context block
+    # 컨텍스트 포맷팅
     context_block = "\n\n".join(
         f"[문서 {i+1}] {meta.get('domain', 'unknown')}\n{doc}"
         for i, (doc, meta) in enumerate(zip(documents, metadatas))
     )
 
-    # Recent chat history (best-effort, short)
-    history = state.get("chat_history", [])
-    history_text = ""
-    if history:
-        recent = history[-6:]
-        history_lines = [
-            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}" for msg in recent
-        ]
-        history_text = "[Recent chat]\n" + "\n".join(history_lines) + "\n\n"
+    system_content = resources.system_prompt + "\n\n규칙: 본문에 툴/출처명(tavily, websearch 등)을 넣지 말고, 출처는 마지막 '📚 참고' 섹션에만 표기하세요."
+    user_content = f"질문: {question}\n\n컨텍스트:\n{context_block}"
 
     messages = [
-        {"role": "system", "content": resources.system_prompt},
-        {
-            "role": "user",
-            "content": (
-                f"질문: {question}\n\n"
-                f"{history_text}문서:\n{context_block}\n\n"
-                "===== 답변 작성 규칙 (엄격 준수) =====\n\n"
-                "1. 문단 구성 (필수):\n"
-                "   - 첫 문단: 핵심 개념이나 정의를 2-3문장으로 설명\n"
-                "   - 둘째 문단: 상세 설명이나 특징 (필요시)\n"
-                "   - 각 문단 사이에는 반드시 빈 줄 삽입\n"
-                "   - 문단 내에서는 줄바꿈 없이 자연스럽게 이어지도록 작성\n\n"
-                "2. 예시 코드 (필요시만):\n"
-                "   - 본문 설명이 완전히 끝난 후, 맨 마지막에 배치\n"
-                "   - 반드시 '예시:' 제목을 한 번만 붙이고 그 아래 코드블록 작성\n"
-                "   - 코드블록 앞/뒤로 충분한 여백(빈 줄) 확보\n\n"
-                "3. 절대 금지 사항:\n"
-                "   - 출처, 참고, References, URL, 이모지(📚📖🔗 등) 일체 금지\n"
-                "   - '예시:'라는 단어를 본문 중간에 넣지 말 것\n"
-                "   - 불필요한 불릿 포인트나 번호 목록 자제\n\n"
-                "4. 작성 스타일:\n"
-                "   - 자연스럽고 대화체로 설명\n"
-                "   - 간결하고 명확하게 (불필요한 장황함 금지)\n"
-                "   - 문장은 짧고 읽기 쉽게\n\n"
-                "좋은 예시:\n"
-                "그리디 알고리즘은 매 순간 최선의 선택을 하는 방법입니다. 전체 최적해를 보장하지는 않지만, 빠르고 직관적인 해결책을 제공합니다.\n\n"
-                "Python에서는 표준 라이브러리만으로 충분히 구현할 수 있습니다. 정렬이 필요하면 sorted()를, 우선순위 큐가 필요하면 heapq 모듈을 사용하면 됩니다.\n\n"
-                "예시:\n```python\nimport heapq\narr = [5, 2, 8, 1]\nheapq.heapify(arr)\n```"
-            ),
-        },
+        SystemMessage(content=system_content),
+        HumanMessage(content=user_content),
     ]
 
     try:
-        # Allow up to config max; short 질문은 300으로 완화
-        max_tokens = config.llm_max_tokens  # allow full configured limit for completeness
-
-        response = resources.llm_client.chat.completions.create(
-            model=config.llm_model,
-            messages=messages,
-            temperature=config.llm_temperature,
-            max_tokens=max_tokens,
-            top_p=config.config["llm"].get("top_p", 0.9),
+        # bind_tools로 도구 바인딩 (LLM이 필요시 web_search 호출 가능)
+        rag_tools = get_rag_tools()
+        llm_with_tools = resources.langchain_llm.bind_tools(
+            rag_tools,
+            tool_choice="auto",  # LLM이 자동으로 도구 호출 여부 결정
         )
-        answer_text = response.choices[0].message.content
 
-        # 후처리 파이프라인
-        answer_text = _strip_existing_sources(answer_text)
-        answer_text = _clean_tool_mentions(answer_text)
-        answer_text = _relocate_code_examples(answer_text)
-        answer_text = _format_paragraphs(answer_text)
-        
-        state["generation"] = answer_text
-        logger.info("[Generate] Generation done")
+        response = llm_with_tools.invoke(messages)
+
+        # tool_calls가 있으면 처리
+        if response.tool_calls:
+            logger.info(f"[Generate] Tool calls 감지: {[tc['name'] for tc in response.tool_calls]}")
+
+            for tool_call in response.tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+
+                if tool_name == "web_search":
+                    # 웹 검색 수행
+                    from .tools import web_search as web_search_tool_func
+                    search_result = web_search_tool_func.invoke(tool_args)
+                    logger.info(f"[Generate] 웹 검색 수행: {tool_args.get('query', '')}")
+
+                    # 웹 검색 결과로 다시 답변 생성
+                    enhanced_context = f"{context_block}\n\n[웹 검색 결과]\n{search_result}"
+                    enhanced_messages = [
+                        SystemMessage(content=system_content),
+                        HumanMessage(content=f"질문: {question}\n\n컨텍스트:\n{enhanced_context}"),
+                    ]
+
+                    # 도구 없이 최종 답변 생성
+                    final_response = resources.langchain_llm.invoke(enhanced_messages)
+                    answer_text = final_response.content
+
+                elif tool_name == "answer_directly":
+                    # 바로 답변 (tool 없이 재호출)
+                    final_response = resources.langchain_llm.invoke(messages)
+                    answer_text = final_response.content
+                else:
+                    answer_text = response.content or "답변을 생성할 수 없습니다."
+        else:
+            # tool_calls가 없으면 직접 답변
+            answer_text = response.content
+
+        # 기존 출처 제거 및 툴명 정리
+        answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
+
+        # URL 출처 추가
+        source_urls = []
+        for meta in metadatas:
+            url = meta.get("url", "unknown")
+            if url != "unknown" and url not in source_urls:
+                source_urls.append(url)
+
+        if source_urls:
+            sources_section = "\n\n📚 참고:\n" + "\n".join(
+                f"- {url}" for url in source_urls
+            )
+            answer = answer_text + sources_section
+        else:
+            answer = answer_text
+
+        state["generation"] = answer
+        logger.info("[Generate] 답변 생성 완료")
 
     except Exception as e:
-        logger.error(f"[Generate] Error: {e}")
-        state["generation"] = "답변 생성에 실패했습니다."
+        logger.error(f"[Generate] 실패: {e}")
+        state["generation"] = "답변 생성 중 오류가 발생했습니다."
 
     elapsed = time.time() - start_time
-    logger.info(f"[Generate] Done ({elapsed:.2f}s)")
+    logger.info(f"[Generate] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "generate")
-
-def _relocate_code_examples(answer_text: str) -> str:
-    """
-    코드 예시를 본문 맨 끝으로 재배치
-    
-    Args:
-        answer_text: 원본 답변 텍스트
-        
-    Returns:
-        str: 코드 예시가 맨 끝으로 이동된 텍스트
-    """
-    lines = answer_text.split('\n')
-    main_content = []
-    code_blocks = []
-    in_code_block = False
-    
-    for line in lines:
-        if '```' in line:
-            in_code_block = not in_code_block
-            code_blocks.append(line)
-        elif in_code_block:
-            code_blocks.append(line)
-        elif '예시:' in line:
-            continue  # 중간의 '예시:' 제목 제거
-        else:
-            if not in_code_block and not code_blocks:
-                main_content.append(line)
-    
-    main_text = '\n'.join(main_content).strip()
-    
-    # 코드블록이 있으면 맨 끝에 추가
-    if code_blocks:
-        code_text = '\n'.join(code_blocks)
-        return f"{main_text}\n\n예시:\n{code_text}"
-    
-    return main_text
-
-
-def _format_paragraphs(answer_text: str) -> str:
-    """
-    문단 형식 정리 - 연속 공백줄 통일, 문단 내 줄바꿈 제거
-    
-    Args:
-        answer_text: 원본 답변 텍스트
-        
-    Returns:
-        str: 형식이 정리된 텍스트
-    """
-    # 연속된 공백줄을 2개로 통일
-    text = re.sub(r'\n{3,}', '\n\n', answer_text)
-    
-    # 문단 분리
-    paragraphs = text.split('\n\n')
-    cleaned_paragraphs = []
-    
-    for para in paragraphs:
-        # 코드블록은 건드리지 않음
-        if '```' in para:
-            cleaned_paragraphs.append(para)
-            continue
-        
-        # 문단 내 불필요한 줄바꿈 제거
-        cleaned = re.sub(r'\n(?!\n)', ' ', para.strip())
-        cleaned = re.sub(r'\s+', ' ', cleaned)  # 연속 공백 제거
-        
-        if cleaned:
-            cleaned_paragraphs.append(cleaned)
-    
-    result = '\n\n'.join(cleaned_paragraphs).strip()
-    
-    # 중복된 '예시:' 제거
-    result = re.sub(r'(예시:\s*\n?){2,}', '예시:\n', result)
-    
-    return result
+# ### 수정 완료 ###
 
 
 def _strip_existing_sources(answer_text: str) -> str:
-    """Remove existing reference markers and emojis if present."""
-    # 모든 출처 관련 마커 (이모지 포함)
-    markers = [
-        "References:", "Reference:", "Reference",
-        "출처:", "출처", 
-        "참고:", "참고",
-        "📚 참고:", "📚",
-        "[출처]", "[참고]", "[References]"
-    ]
-    
-    result = answer_text
-    for marker in markers:
-        if marker in result:
-            result = result.split(marker)[0].rstrip()
-    
-    # 추가: 남은 이모지 제거 (📚, 📖, 🔗 등)
-    result = re.sub(r'[📚📖🔗🔍📝💡]', '', result)
-    
-    return result.strip()
+    """기존 출처 섹션 제거"""
+    marker = "📚 참고"
+    if marker in answer_text:
+        return answer_text.split(marker)[0].rstrip()
+    return answer_text
 
 
 def _clean_tool_mentions(answer_text: str) -> str:
     """
-    Remove tool mentions (tavily/websearch) from generated text.
+    본문에서 tavily/websearch 등 툴 이름을 제거해 답변을 자연스럽게 만든다.
     """
     cleaned = answer_text
     for token in ["tavily", "websearch", "web search", "Tavily", "WebSearch"]:
-        cleaned = re.sub(rf"\b{re.escape(token)}\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(rf"\(?\b{re.escape(token)}\b\)?", "", cleaned, flags=re.IGNORECASE)
+    # Collapse double spaces left by removals
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
     return cleaned.strip()
 
 
-# ========== 노드 8: Hallucination Check (개선 버전) ==========
+# ========== 노드 8: Hallucination Check ==========
 
-
-
+# ### 수정 시작 ###
 def hallucination_check_node(state):
-    """Hallucination check (conditional)."""
-    logger.info("[HallucinationCheck] start")
+    """
+    환각 검증 (Self-RAG)
+    with_structured_output을 사용하여 tool calling 방식으로 검증.
+    """
+    logger.info("[HallucinationCheck] 환각 검증 시작")
     start_time = time.time()
 
     resources = get_resources()
-
     generation = state["generation"]
     documents = state["final_documents"]
-    doc_relevance = state.get("document_relevance", "unknown")
-
-    # 문서 관련성이 relevant이거나 환각검사 스킵 플래그가 설정된 경우
-    if doc_relevance == "relevant" or state.get("skip_hallucination_check"):
-        logger.info("[HallucinationCheck] 문서 관련성 높음 → 환각검사 스킵")
-        state["hallucination_grade"] = "supported"
-        state["web_search_needed"] = False
-        return add_to_history(state, "hallucination_check")
-
-    # fast-path or already web-searched
-    if state.get("fast_path") or state.get("web_search_count", 0) >= 1:
-        logger.info("[HallucinationCheck] 웹서치 이미 진행됨 또는 fast_path → 스킵")
-        state["hallucination_grade"] = "supported"
-        state["web_search_needed"] = False
-        return add_to_history(state, "hallucination_check")
 
     if not documents:
-        logger.warning("[HallucinationCheck] no documents, skip")
+        logger.warning("[HallucinationCheck] 문서 없음, 검증 스킵")
         state["hallucination_grade"] = "not_sure"
         return add_to_history(state, "hallucination_check")
 
-    # Clean answer text
+    # 출처 제거한 답변만 검증
     answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
-    # Step 1: keyword overlap quick check
-    keyword_overlap = _calculate_keyword_overlap(answer_only, documents)
+    # 컨텍스트 요약 (너무 길면 truncate)
+    context_preview = "\n\n".join(documents[:3])
+    if len(context_preview) > 2000:
+        context_preview = context_preview[:2000] + "..."
 
-    # If overlap is high, accept
-    if keyword_overlap >= 0.35:
-        state["hallucination_grade"] = "supported"
-        state["web_search_needed"] = False
-        return add_to_history(state, "hallucination_check")
+    system_prompt = """당신은 환각(hallucination) 검증 전문가입니다.
+답변이 제공된 문서에 근거하는지 판단하세요.
 
-    # If very low, allow a single websearch
-    if keyword_overlap < 0.10:
-        state["hallucination_grade"] = "not_supported"
-        state["web_search_needed"] = not state.get("web_search_done", False)
-        return add_to_history(state, "hallucination_check")
+판단 기준:
+- SUPPORTED: 답변의 모든 내용이 문서에 근거함
+- NOT_SUPPORTED: 문서에 없는 내용이 포함됨 (환각)
+- NOT_SURE: 판단하기 어려움"""
 
-    # Mid overlap: run structured LLM check
-    context_text = _smart_truncate_documents(documents, max_tokens=3000)
-
-    # LLM structured output
-    system_prompt = """You are a fact-checker. Evaluate if the answer is fully grounded in the provided documents.
-
-Provide:
-1. reasoning: Your judgment reasoning (2-3 sentences)
-2. grade: SUPPORTED / NOT_SUPPORTED / NOT_SURE
-3. confidence: Your confidence score (0.0 to 1.0)
-
-Be strict: if ANY claim lacks evidence, mark as NOT_SUPPORTED."""
-
-    user_prompt = f"""Answer:
+    user_prompt = f"""답변:
 {answer_only}
 
-Documents:
-{context_text}
+제공된 문서:
+{context_preview}
 
-Is the answer fully supported by the documents?"""
+답변의 모든 주장이 문서에서 확인됩니까?"""
 
     try:
-        structured_llm = resources.langchain_llm_fast.with_structured_output(HallucinationGrade)
-
-        messages = [
+        structured_llm = resources.langchain_llm_fast.with_structured_output(
+            HallucinationGrade,
+            method="function_calling",
+        )
+        result: HallucinationGrade = structured_llm.invoke([
             SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
-        ]
-
-        result: HallucinationGrade = structured_llm.invoke(messages)
-
-        # Confidence calibration (LLM confidence + keyword overlap)
-        calibrated_confidence = result.confidence * 0.7 + keyword_overlap * 0.3
-
-        if calibrated_confidence < 0.65 and result.grade.value == "supported":
-            logger.warning(
-                f"[HallucinationCheck] Low confidence ({calibrated_confidence:.2f}), keyword_overlap={keyword_overlap:.2%}"
-            )
-            if calibrated_confidence < 0.50:
-                result.grade = HallucinationType.NOT_SURE
+            HumanMessage(content=user_prompt),
+        ])
 
         state["hallucination_grade"] = result.grade.value
+        logger.info(f"[HallucinationCheck] 결과: {result.grade.value}, 근거: {result.reasoning}")
 
-        if result.grade.value == "not_supported":
-            state["web_search_needed"] = not state.get("web_search_done", False)
-        else:
-            state["web_search_needed"] = False
-
-        logger.info(
-            f"[HallucinationCheck] Grade={result.grade.value}, "
-            f"LLM_Conf={result.confidence:.2f}, Calibrated={calibrated_confidence:.2f}, "
-            f"Keyword_Overlap={keyword_overlap:.2%}"
-        )
-        logger.info(f"[HallucinationCheck] Reasoning: {result.reasoning}")
+        if result.grade == HallucinationType.NOT_SUPPORTED:
+            state["web_search_needed"] = True
 
     except Exception as e:
-        logger.error(f"[HallucinationCheck] error: {e}", exc_info=True)
+        logger.error(f"[HallucinationCheck] 실패: {e}")
         state["hallucination_grade"] = "not_sure"
-        state["web_search_needed"] = False
 
     elapsed = time.time() - start_time
-    logger.info(f"[HallucinationCheck] done ({elapsed:.2f}s)")
+    logger.info(f"[HallucinationCheck] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "hallucination_check")
-
-
-def _calculate_keyword_overlap(answer: str, documents: List[str]) -> float:
-    """
-    간단한 keyword overlap 계산 (답변과 문서 간의 어휘 중복도)
-
-    Returns:
-        float: Overlap ratio (0.0 ~ 1.0)
-    """
-    import re
-
-    # 답변에서 키워드 추출 (2글자 이상, 알파벳/한글)
-    answer_words = set(re.findall(r'[a-zA-Z가-힣]{2,}', answer.lower()))
-
-    if not answer_words:
-        return 0.0
-
-    # 문서에서 키워드 추출
-    doc_text = " ".join(documents).lower()
-    doc_words = set(re.findall(r'[a-zA-Z가-힣]{2,}', doc_text))
-
-    # Overlap 계산
-    matching_words = answer_words.intersection(doc_words)
-    overlap_ratio = len(matching_words) / len(answer_words)
-
-    return overlap_ratio
-
-
-def _smart_truncate_documents(documents: List[str], max_tokens: int = 3000) -> str:
-    """
-    토큰 수 기반으로 문서를 스마트하게 truncate
-
-    Args:
-        documents: 문서 리스트
-        max_tokens: 최대 토큰 수
-
-    Returns:
-        str: Truncated된 문서 텍스트
-    """
-    try:
-        import tiktoken
-        enc = tiktoken.encoding_for_model("gpt-4o-mini")
-    except:
-        # tiktoken 없으면 문자 수 기반 fallback (대략 1 token = 4 chars)
-        max_chars = max_tokens * 4
-        combined = "\n\n".join(f"[Doc {i+1}]\n{doc}" for i, doc in enumerate(documents))
-        if len(combined) > max_chars:
-            return combined[:max_chars] + "\n... [truncated]"
-        return combined
-
-    result = []
-    total_tokens = 0
-
-    for i, doc in enumerate(documents):
-        doc_with_header = f"[Doc {i+1}]\n{doc}"
-        doc_tokens = len(enc.encode(doc_with_header))
-
-        if total_tokens + doc_tokens <= max_tokens:
-            result.append(doc_with_header)
-            total_tokens += doc_tokens
-        else:
-            # 남은 토큰으로 일부만 포함
-            remaining_tokens = max_tokens - total_tokens
-            if remaining_tokens > 50:  # 최소 50 토큰은 있어야 의미 있음
-                truncated_doc = enc.decode(enc.encode(doc)[:remaining_tokens])
-                result.append(f"[Doc {i+1}]\n{truncated_doc}... [truncated]")
-            break
-
-    return "\n\n".join(result)
+# ### 수정 완료 ###
 
 
 # ========== 노드 9: Answer Grading ==========
 
+# ### 수정 시작 ###
 def answer_grading_node(state):
-    """답변 품질 평가 (Self-RAG)"""
+    """
+    답변 품질 평가 (Self-RAG)
+    with_structured_output을 사용하여 tool calling 방식으로 평가.
+    """
     logger.info("[AnswerGrading] 답변 품질 평가 시작")
     start_time = time.time()
 
     resources = get_resources()
-    config = get_config()
-
     question = state["question"]
     generation = state["generation"]
 
     # 출처 제거한 답변만 평가
     answer_only = _clean_tool_mentions(_strip_existing_sources(generation))
 
-    prompt = f"""다음 답변이 질문에 실질적으로 도움이 되는지 평가하세요.
+    system_prompt = """당신은 답변 품질 평가 전문가입니다.
+답변이 질문에 유용한지 판단하세요.
 
-질문: {question}
+평가 기준:
+- USEFUL: 질문에 충분히 답변함
+- NOT_USEFUL: 질문에 답변하지 못함"""
+
+    user_prompt = f"""질문: {question}
 
 답변: {answer_only}
 
-평가 기준:
-✅ USEFUL - 다음 중 하나라도 해당:
-  - 질문에 직접적인 답변을 제공함
-  - 구체적인 정보나 예시를 포함함
-  - 실행 가능한 가이드를 제공함
-  - 라이브러리/도구 이름과 간단한 설명이 있음
-
-❌ NOT_USEFUL - 다음 모두 해당:
-  - 질문과 완전히 무관한 내용
-  - 추상적이거나 막연한 답변만 있음
-  - "알 수 없다" 또는 "정보가 없다"는 내용
-
-한 단어만 답변하세요 (USEFUL 또는 NOT_USEFUL):"""
+이 답변이 질문에 충분히 답변합니까?"""
 
     try:
-        response = resources.llm_client.chat.completions.create(
-            model=config.context_quality_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=20,
+        structured_llm = resources.langchain_llm_fast.with_structured_output(
+            UsefulnessGrade,
+            method="function_calling",
         )
-        label = response.choices[0].message.content.strip().upper()
+        result: UsefulnessGrade = structured_llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
 
-        if "USEFUL" in label and "NOT" not in label:
-            state["answer_usefulness"] = "useful"
-            logger.info("[AnswerGrading] 결과: USEFUL")
-        else:
-            state["answer_usefulness"] = "not_useful"
-            logger.warning("[AnswerGrading] 결과: NOT USEFUL")
+        state["answer_usefulness"] = result.grade.value
+        logger.info(f"[AnswerGrading] 결과: {result.grade.value}, 근거: {result.reasoning}")
+
+        if result.grade == UsefulnessType.NOT_USEFUL:
             state["web_search_needed"] = True
 
     except Exception as e:
@@ -1245,6 +985,7 @@ def answer_grading_node(state):
     logger.info(f"[AnswerGrading] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "answer_grading")
+# ### 수정 완료 ###
 
 
 # ========== 노드 10: Web Search ==========
@@ -1263,18 +1004,11 @@ def web_search_node(state):
         state["final_metadatas"] = []
         return add_to_history(state, "web_search")
 
-    # 웹 검색 카운트 증가
-    web_search_count = state.get("web_search_count", 0)
-    state["web_search_count"] = web_search_count + 1
-    
-    logger.info(f"[WebSearch] 웹 검색 실행 (횟수: {state['web_search_count']})")
-
     # 웹 검색 실행
     documents, metadatas = web_search_tool.search_with_metadata(question)
 
     state["final_documents"] = documents
     state["final_metadatas"] = metadatas
-    state["web_search_done"] = True
 
     elapsed = time.time() - start_time
     logger.info(f"[WebSearch] {len(documents)}개 결과 검색 완료 ({elapsed:.2f}s)")
@@ -1282,19 +1016,16 @@ def web_search_node(state):
     return add_to_history(state, "web_search")
 
 
-# ========== 개인화 및 질문 추천 노드 ==========
+# NEW START - 개인화 노드
 
 # ========== 노드 11: Load User Context (개인화) ==========
 
 def load_user_context_node(state: RAGState) -> RAGState:
     """
-    사용자 컨텍스트 로드 (개인화 - 간소화 버전)
+    사용자 컨텍스트 로드 (개인화)
 
-    Django에서 전달받은 user_context를 기반으로 현재 질문과 관련된
-    사용자 학습 목표 및 관심사를 분석합니다.
-
-    Note: 멘토님의 원본과 다르게 DB 쿼리를 하지 않고,
-          Django에서 이미 전달받은 user_context를 사용합니다.
+    DB에서 사용자의 과거 서비스 선택 이력을 조회하고,
+    현재 질문과 관련된 선택 항목 및 "잊었을 가능성이 있는" 항목을 식별합니다.
 
     Args:
         state (RAGState): 현재 상태
@@ -1306,76 +1037,56 @@ def load_user_context_node(state: RAGState) -> RAGState:
     start_time = time.time()
 
     user_id = state.get("user_id", "")
-    user_context = state.get("user_context", {})
     question = state["question"]
 
-    if not user_id or not user_context:
-        logger.info("[LoadUserContext] user_id 또는 user_context 없음, 개인화 스킵")
+    if not user_id:
+        logger.info("[LoadUserContext] user_id 없음, 개인화 스킵")
         return add_to_history(state, "load_user_context")
 
     try:
-        # Django에서 전달받은 user_context 사용
-        # user_context 구조: {
-        #     "learning_goals": "Python 마스터하기, Django 학습",
-        #     "interested_topics": "웹 개발, API 설계, 데이터베이스",
-        # }
-        learning_goals = user_context.get("learning_goals", "")
-        interested_topics = user_context.get("interested_topics", "")
+        # Step 1: DB에서 사용자 선택 이력 조회
+        # TODO: 실제 DB 연동 구현 필요 (현재는 mock)
+        user_selections = _fetch_user_selections_from_db(user_id)
 
-        if not learning_goals and not interested_topics:
-            logger.info("[LoadUserContext] 사용자 학습 데이터 없음")
+        if not user_selections:
+            logger.info(f"[LoadUserContext] 사용자 {user_id}의 선택 이력 없음")
             return add_to_history(state, "load_user_context")
 
-        # 질문에서 키워드 추출
+        # Step 2: 질문에서 키워드 추출
         question_keywords = _extract_keywords(question)
 
-        # 관련 항목 찾기
-        related_items = []
-        forgotten_items = []
+        # Step 3: 질문과 관련된 선택 항목 필터링
+        related_selections = []
+        for selection in user_selections:
+            if _has_relevance(selection, question_keywords):
+                related_selections.append(selection)
 
-        # learning_goals 분석
-        if learning_goals:
-            goals_list = [g.strip() for g in learning_goals.split(",")]
-            for goal in goals_list:
-                if _is_related_to_question(goal, question_keywords, question):
-                    related_items.append({
-                        "type": "learning_goal",
-                        "content": goal,
-                    })
-                    # 질문에 직접 언급되지 않은 경우 상기 후보
-                    if not _is_mentioned_in_question(goal, question):
-                        forgotten_items.append({
-                            "type": "learning_goal",
-                            "content": goal,
-                        })
+        # Step 4: "잊었을 가능성" 판단
+        # 선택했지만 질문에서 직접 언급하지 않은 항목 = 상기 후보
+        question_lower = question.lower()
+        forgotten_candidates = []
+        for selection in related_selections:
+            service_name = selection.get("service_name", "").lower()
+            selected_option = selection.get("selected_option", "").lower()
 
-        # interested_topics 분석
-        if interested_topics:
-            topics_list = [t.strip() for t in interested_topics.split(",")]
-            for topic in topics_list:
-                if _is_related_to_question(topic, question_keywords, question):
-                    related_items.append({
-                        "type": "interested_topic",
-                        "content": topic,
-                    })
-                    # 질문에 직접 언급되지 않은 경우 상기 후보
-                    if not _is_mentioned_in_question(topic, question):
-                        forgotten_items.append({
-                            "type": "interested_topic",
-                            "content": topic,
-                        })
+            # 서비스명이나 선택 옵션이 질문에 없으면 잊었을 가능성
+            if service_name not in question_lower and selected_option not in question_lower:
+                forgotten_candidates.append(selection)
 
-        state["related_selections"] = related_items
-        state["forgotten_candidates"] = forgotten_items
+        state["user_selections"] = user_selections
+        state["related_selections"] = related_selections
+        state["forgotten_candidates"] = forgotten_candidates
 
         logger.info(
             f"[LoadUserContext] 로드 완료 - "
-            f"관련: {len(related_items)}, "
-            f"상기 후보: {len(forgotten_items)}"
+            f"전체: {len(user_selections)}, "
+            f"관련: {len(related_selections)}, "
+            f"상기 후보: {len(forgotten_candidates)}"
         )
 
     except Exception as e:
         logger.error(f"[LoadUserContext] 실패: {e}")
+        state["user_selections"] = []
         state["related_selections"] = []
         state["forgotten_candidates"] = []
 
@@ -1383,6 +1094,31 @@ def load_user_context_node(state: RAGState) -> RAGState:
     logger.info(f"[LoadUserContext] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "load_user_context")
+
+
+def _fetch_user_selections_from_db(user_id: str) -> List[Dict]:
+    """
+    DB에서 사용자 선택 이력 조회 (Mock 구현)
+
+    TODO: 실제 DB 연동으로 교체 필요
+
+    Returns:
+        List[Dict]: 사용자 선택 이력
+            - service_name: 서비스명
+            - selected_option: 선택한 옵션
+            - category: 카테고리
+            - selected_at: 선택 일시
+    """
+    # Mock 데이터 - 실제 구현 시 DB 쿼리로 교체
+    # 예: SELECT * FROM user_selections WHERE user_id = ?
+    logger.debug(f"[DB Mock] 사용자 {user_id} 선택 이력 조회")
+
+    # 실제 구현 예시:
+    # from .database import get_db_connection
+    # db = get_db_connection()
+    # return db.query("SELECT * FROM user_selections WHERE user_id = ?", [user_id])
+
+    return []  # 실제 DB 연동 전까지 빈 리스트 반환
 
 
 def _extract_keywords(text: str) -> List[str]:
@@ -1396,56 +1132,38 @@ def _extract_keywords(text: str) -> List[str]:
         List[str]: 추출된 키워드 목록
     """
     # 간단한 키워드 추출 (공백 기준 분리 + 불용어 제거)
-    stopwords = {"은", "는", "이", "가", "을", "를", "의", "에", "에서", "으로", "로", "와", "과", "하고", "있", "없", "수", "더", "등"}
+    # TODO: 더 정교한 키워드 추출 (형태소 분석 등)
+    stopwords = {"은", "는", "이", "가", "을", "를", "의", "에", "에서", "으로", "로", "와", "과", "하고", "있", "없", "수"}
 
-    words = text.lower().replace("->", "").replace(".", "").split()
+    words = text.lower().replace("?", "").replace(".", "").split()
     keywords = [w for w in words if len(w) > 1 and w not in stopwords]
 
     return keywords
 
 
-def _is_related_to_question(item: str, keywords: List[str], question: str) -> bool:
+def _has_relevance(selection: Dict, keywords: List[str]) -> bool:
     """
-    항목이 질문과 관련 있는지 판단
+    선택 항목이 키워드와 관련 있는지 판단
 
     Args:
-        item: 사용자 학습 목표 또는 관심사
+        selection: 사용자 선택 항목
         keywords: 질문 키워드 목록
-        question: 원본 질문
 
     Returns:
         bool: 관련 여부
     """
-    item_lower = item.lower()
-    question_lower = question.lower()
+    service_name = selection.get("service_name", "").lower()
+    category = selection.get("category", "").lower()
+    selected_option = selection.get("selected_option", "").lower()
 
-    # 직접 언급된 경우
-    if item_lower in question_lower:
-        return True
+    selection_text = f"{service_name} {category} {selected_option}"
 
     # 키워드 중 하나라도 포함되면 관련 있음
     for keyword in keywords:
-        if keyword in item_lower:
+        if keyword in selection_text:
             return True
 
     return False
-
-
-def _is_mentioned_in_question(item: str, question: str) -> bool:
-    """
-    항목이 질문에 직접 언급되었는지 확인
-
-    Args:
-        item: 사용자 학습 목표 또는 관심사
-        question: 원본 질문
-
-    Returns:
-        bool: 언급 여부
-    """
-    item_lower = item.lower()
-    question_lower = question.lower()
-
-    return item_lower in question_lower
 
 
 # ========== 노드 12: Personalize Response (개인화) ==========
@@ -1454,8 +1172,8 @@ def personalize_response_node(state: RAGState) -> RAGState:
     """
     답변 개인화 (상기 메시지 주입)
 
-    생성된 답변에 사용자가 잊었을 수 있는 과거 학습 목표나 관심사를
-    상기시키는 메시지를 자연스럽게 추가합니다.
+    생성된 답변에 사용자가 잊었을 수 있는 과거 선택 사항을 상기시키는
+    메시지를 자연스럽게 추가합니다.
 
     Args:
         state (RAGState): 현재 상태
@@ -1480,14 +1198,13 @@ def personalize_response_node(state: RAGState) -> RAGState:
         reminder_parts = []
 
         for item in reminder_items:
-            item_type = item.get("type", "")
-            content = item.get("content", "")
+            service_name = item.get("service_name", "")
+            selected_option = item.get("selected_option", "")
 
-            if content:
-                if item_type == "learning_goal":
-                    reminder_parts.append(f"'{content}' 학습 목표")
-                else:
-                    reminder_parts.append(f"'{content}'")
+            if service_name and selected_option:
+                reminder_parts.append(f"'{service_name}'에서 '{selected_option}'")
+            elif service_name:
+                reminder_parts.append(f"'{service_name}'")
 
         if reminder_parts:
             # 자연스러운 상기 메시지 구성
@@ -1496,14 +1213,17 @@ def personalize_response_node(state: RAGState) -> RAGState:
             else:
                 items_text = f"{reminder_parts[0]}과(와) {reminder_parts[1]}"
 
-            # 이모지 없이 자연스러운 메시지 (일관성 유지)
             reminder_message = (
-                f"\n\n**참고**: 이전에 관심을 보이셨던 {items_text}도 "
-                f"함께 확인해보시면 도움이 될 수 있습니다."
+                f"\n\n💡 **참고**: 고객님께서는 이전에 {items_text}을(를) "
+                f"선택하셨는데요, 이 부분도 함께 확인해보시면 도움이 될 수 있습니다."
             )
 
-            # 답변 끝에 자연스럽게 추가 (출처 마커 사용 안 함)
-            personalized_generation = generation.rstrip() + reminder_message
+            # 출처 섹션 앞에 삽입
+            if "📚 참고:" in generation:
+                parts = generation.split("📚 참고:")
+                personalized_generation = parts[0].rstrip() + reminder_message + "\n\n📚 참고:" + parts[1]
+            else:
+                personalized_generation = generation + reminder_message
 
             state["generation"] = personalized_generation
             state["reminder_added"] = True
@@ -1521,98 +1241,109 @@ def personalize_response_node(state: RAGState) -> RAGState:
 
     return add_to_history(state, "personalize_response")
 
+# NEW END - 개인화 노드
 
 
-
-
-# ========== ?? 13: Suggest Related Questions ==========
-
-
-
-
-
+# ========== 노드 13: Suggest Related Questions (비동기 개인화) ==========
 
 def suggest_related_questions_node(state: RAGState) -> RAGState:
-    """Generate up to 3 related follow-up questions."""
-    logger.info("[SuggestQuestions] start")
-    start_time = time.time()
+    """
+    관련 질문 추천 (비동기 개인화)
 
-    # Skip when fast-path or personalization disabled
-    if state.get("fast_path") or state.get("enable_personalization") is False:
-        state["related_questions"] = []
-        return add_to_history(state, "suggest_related_questions")
+    현재 질문과 생성된 답변을 바탕으로
+    사용자가 이어서 물어볼 만한 관련 질문 3개를 추천합니다.
+
+    Args:
+        state (RAGState): 현재 상태
+
+    Returns:
+        RAGState: 관련 질문이 추가된 상태
+    """
+    logger.info("[SuggestQuestions] 관련 질문 추천 시작")
+    start_time = time.time()
 
     resources = get_resources()
 
     question = state["question"]
-    generation = state["generation"]
+    answer = state["generation"]
     user_context = state.get("user_context", {})
 
-    # Build short context summary
-    context_summary = ""
-    if user_context:
-        learning_goals = user_context.get("learning_goals", "")
-        interested_topics = user_context.get("interested_topics", "")
+    # user_context에서 학습 목표와 관심 주제 추출
+    learning_goals = user_context.get("learning_goals", "")
+    interested_topics = user_context.get("interested_topics", "")
+
+    # 출처 제거한 답변만 사용
+    answer_only = _clean_tool_mentions(_strip_existing_sources(answer))
+
+    # 개인화 컨텍스트 구성
+    context_text = ""
+    if learning_goals or interested_topics:
+        context_text = "\n\n사용자 프로필:"
         if learning_goals:
-            context_summary += f"Goals: {learning_goals}\n"
+            context_text += f"\n- 학습 목표: {learning_goals}"
         if interested_topics:
-            context_summary += f"Interests: {interested_topics}\n"
+            context_text += f"\n- 관심 주제: {interested_topics}"
 
-    # Trim answer for prompt
-    answer_only = _strip_existing_sources(generation)
-    if len(answer_only) > 500:
-        answer_only = answer_only[:500] + "..."
+    system_prompt = """당신은 학습 도우미입니다. 사용자의 현재 질문과 답변을 보고,
+자연스럽게 이어질 수 있는 관련 질문 3개를 추천하세요.
 
-    system_prompt = """You are a helpful tutor. Given the user's question and answer, suggest 3 natural follow-up questions.
-- Keep each as a clear one-line question
-- No numbering, separate by newlines
-- Align with the current context and user interests"""
+추천 기준:
+- 현재 주제와 직접 연관된 심화 질문
+- 학습 단계를 고려한 적절한 난이도
+- 실무에서 자주 마주치는 상황
+- 사용자의 학습 목표와 관심사 반영
 
-    user_prompt = f"""Question: {question}
+형식: 각 질문은 한 줄로, 구체적이고 명확하게 작성
+예시:
+- Python에서 리스트 컴프리헨션은 어떻게 사용하나요?
+- git merge와 git rebase의 차이는 무엇인가요?
+- 딕셔너리에서 특정 키가 존재하는지 확인하는 방법은?"""
 
-Answer summary: {answer_only}"""
+    user_prompt = f"""현재 질문: {question}
 
-    if context_summary:
-        user_prompt += f"\\n\\nUser info:\\n{context_summary}"
+답변 요약: {answer_only[:500]}...{context_text}
 
-    user_prompt += "\\n\\nSuggest 3 related questions:"
+위 질문과 답변을 바탕으로 사용자가 이어서 물어볼 만한 관련 질문 3개를 추천하세요."""
 
     try:
         response = resources.llm_client.chat.completions.create(
-            model=resources.langchain_llm_fast.model_name,
+            model=get_config().context_quality_model,  # 빠른 모델 사용
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.6,
-            max_tokens=160,
+            temperature=0.7,  # 다양성을 위해 약간 높게
+            max_tokens=200,
         )
 
         suggestions_text = response.choices[0].message.content.strip()
 
-        suggestions = [
-            line.strip().lstrip("0123456789.-) ").strip()
-            for line in suggestions_text.split("\n")
-            if line.strip() and len(line.strip()) > 8
-        ]
+        # 파싱: 각 줄을 질문으로 추출 (- 나 숫자로 시작하는 줄)
+        import re
+        questions = []
+        for line in suggestions_text.split("\n"):
+            line = line.strip()
+            # - 나 1. 2. 등으로 시작하는 줄 추출
+            match = re.match(r'^[-•*\d.)\]]+\s*(.+)$', line)
+            if match:
+                question_text = match.group(1).strip()
+                if question_text and len(question_text) > 10:  # 최소 길이 필터
+                    questions.append(question_text)
 
-        state["related_questions"] = suggestions[:3]
-        logger.info(f"[SuggestQuestions] {len(state['related_questions'])} suggestions done")
+        # 최대 3개만
+        related_questions = questions[:3]
+
+        state["related_questions"] = related_questions
+
+        logger.info(f"[SuggestQuestions] {len(related_questions)}개 질문 추천 완료")
+        for i, q in enumerate(related_questions, 1):
+            logger.info(f"  {i}. {q[:50]}...")
 
     except Exception as e:
-        logger.error(f"[SuggestQuestions] failed: {e}")
+        logger.error(f"[SuggestQuestions] 실패: {e}")
         state["related_questions"] = []
 
     elapsed = time.time() - start_time
-    logger.info(f"[SuggestQuestions] done ({elapsed:.2f}s)")
+    logger.info(f"[SuggestQuestions] 완료 ({elapsed:.2f}s)")
 
     return add_to_history(state, "suggest_related_questions")
-
-
-def _strip_existing_sources(answer_text: str) -> str:
-    """Strip existing reference markers if present."""
-    markers = ["References:", "출처", "참고", "Reference", "참고:", "출처:"]
-    for marker in markers:
-        if marker in answer_text:
-            return answer_text.split(marker)[0].rstrip()
-    return answer_text

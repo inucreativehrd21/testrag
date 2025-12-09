@@ -1,6 +1,16 @@
 {
-  "domain": "git",
-  "total_pages": 180,
-  "total_size_chars": 0,
-  "crawled_at": "2025-11-17T10:18:51.373795"
+  "total_documents": 375,
+  "sources": [
+    "atlassian",
+    "pro_git_ko",
+    "github_docs",
+    "official_reference",
+    "gitlab_docs",
+    "git_scm_guides",
+    "git_tower",
+    "bitbucket",
+    "freecodecamp"
+  ],
+  "url_tagged": true,
+  "crawl_version": "extended_v1"
 }

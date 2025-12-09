@@ -1,6 +1,19 @@
 {
-  "domain": "python",
-  "total_pages": 272,
-  "total_size_chars": 0,
-  "crawled_at": "2025-11-17T10:18:51.574878"
+  "total_documents": 389,
+  "sources": [
+    "realpython",
+    "official_tutorial",
+    "official_library",
+    "pymotw",
+    "w3schools",
+    "geeksforgeeks",
+    "programiz",
+    "official_howto",
+    "official_advanced",
+    "python_patterns",
+    "python_peps",
+    "talkpython"
+  ],
+  "url_tagged": true,
+  "crawl_version": "extended_v1"
 }

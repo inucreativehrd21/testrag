@@ -21,9 +21,11 @@ from .nodes import (
     hallucination_check_node,
     answer_grading_node,
     web_search_node,
+    # NEW START - 개인화 노드 import
     load_user_context_node,
     personalize_response_node,
     suggest_related_questions_node,
+    # NEW END - 개인화 노드 import
 )
 from .state import RAGState
 
@@ -58,9 +60,6 @@ def decide_to_generate_or_transform(
 ) -> Literal["transform_query", "generate", "websearch"]:
     """
     문서 관련성 평가 이후 다음 경로 결정
-    
-    - relevant: 바로 생성 (환각검사/웹서치 스킵)
-    - 그 외: 재시도 또는 웹 검색 (1회만)
     """
     from .config import get_config
 
@@ -69,107 +68,82 @@ def decide_to_generate_or_transform(
     retry_count = state["retry_count"]
 
     if document_relevance == "relevant":
-        logger.info("[Decision] 문서 관련성 높음 → generate (환각검사 스킵 예정)")
-        # 플래그 설정: 환각검사/웹서치 건너뛰기
-        state["skip_hallucination_check"] = True
+        logger.info("[Decision] 문서 관련성 높음 → generate")
         return "generate"
     elif retry_count < config.max_retries:
         logger.info(
             f"[Decision] 문서 관련성 부족 → 쿼리 재작성 (시도 {retry_count + 1}/{config.max_retries})"
         )
         state["retry_count"] += 1
-        state["skip_hallucination_check"] = False
         return "transform_query"
     else:
-        logger.warning("[Decision] 최대 재시도 초과 → 웹 검색 (1회만)")
-        state["skip_hallucination_check"] = False
+        logger.warning("[Decision] 최대 재시도 초과 → 웹 검색")
         return "websearch"
-
-
-
-
 
 
 def check_hallucination_and_usefulness(
     state: RAGState,
 ) -> Literal["answer_grading", "websearch", "retry_generate"]:
     """
-    환각 검사 이후 다음 단계 결정
-    
-    - 문서 관련성이 relevant이면: 환각검사 스킵하고 바로 answer_grading
-    - 문서 관련성이 relevant 아니면: 환각검사 진행, 필요시 웹서치 1회만
+    환각 여부에 따라 다음 단계 결정
     """
     from .config import get_config
 
-    config = get_config()
-    doc_relevance = state.get("document_relevance", "unknown")
-    
-    # 문서 관련성이 relevant이면 환각검사 건너뛰고 바로 종료
-    if doc_relevance == "relevant" or state.get("skip_hallucination_check"):
-        logger.info("[Decision] 문서 관련성 높음 → 환각검사 스킵, answer_grading으로")
-        state["hallucination_grade"] = "supported"
-        return "answer_grading"
-    
     hallucination_grade = state["hallucination_grade"]
-    web_search_count = state.get("web_search_count", 0)
+    retry_count = state["retry_count"]
     config = get_config()
-    max_web_search = config.config["context_quality"].get("max_web_search", 1)
 
     if hallucination_grade == "supported":
-        logger.info("[Decision] 환각검사 통과 → answer_grading")
+        logger.info("[Decision] 환각 없음 → answer_grading")
         return "answer_grading"
     elif hallucination_grade == "not_supported":
-        # 웹서치는 설정된 횟수만 허용
-        if web_search_count >= max_web_search:
-            logger.warning(f"[Decision] 웹서치 이미 {max_web_search}회 진행됨 → answer_grading으로 강제 이동")
+        # 안전 가드: 최대 재시도 초과 시 루프 중단
+        if retry_count >= config.max_retries:
+            logger.warning("[Decision] 최대 재시도 초과 → 추가 검색 없이 종료 경로")
             return "answer_grading"
-        
-        logger.warning("[Decision] 환각 감지 → 웹서치 1회 진행")
-        state["web_search_count"] = web_search_count + 1
+
+        logger.warning("[Decision] 환각 발견 → 웹 검색으로 보완")
+        state["retry_count"] += 1
         return "websearch"
     else:
         logger.info("[Decision] 환각 불확실 → answer_grading")
         return "answer_grading"
 
 
-def grade_generation_usefulness(state: RAGState) -> Literal["personalize", "websearch", "end"]:
+def grade_generation_usefulness(state: RAGState) -> Literal["end", "websearch"]:
     """
-    답변 유용성 평가 이후 개인화/웹 검색/종료 결정
-    
-    - useful: 개인화로 진행 (또는 종료)
-    - not useful: 웹서치 재시도 (최대 max_retries까지만)
+    답변 유용성 평가 이후 종료 또는 웹 검색 결정
     """
     from .config import get_config
 
     answer_usefulness = state["answer_usefulness"]
-    web_search_count = state.get("web_search_count", 0)
+    retry_count = state["retry_count"]
     config = get_config()
-    max_web_search = config.config["context_quality"].get("max_web_search", 1)
 
     if answer_usefulness == "useful":
-        logger.info("[Decision] 답변 유용 → 개인화 단계로")
-        return "personalize"
-    
-    # 웹서치 카운트 기반 제한 (1회만)
-    if web_search_count >= max_web_search:
-        logger.warning(f"[Decision] 웹서치 최대 횟수({max_web_search}) 도달 → 강제 종료")
+        logger.info("[Decision] 답변 유용 → 종료")
         return "end"
-    
-    logger.warning(
-        f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 ({web_search_count + 1}/{max_web_search})"
-    )
-    return "websearch"
+    elif retry_count < config.max_retries:
+        logger.warning(
+            f"[Decision] 답변 품질 부족 → 웹 검색으로 재시도 (시도 {retry_count + 1}/{config.max_retries})"
+        )
+        state["retry_count"] += 1
+        return "websearch"
+    else:
+        logger.warning("[Decision] 최대 재시도 초과 → 종료")
+        return "end"
 
 
 # ========== LangGraph 구성 함수 ==========
 
 
+# NEW START - enable_personalization 파라미터 추가
 def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     """
     Adaptive RAG StateGraph 생성
 
     Args:
-        enable_personalization: True면 개인화 및 질문 추천 노드 포함, False면 제외
+        enable_personalization: True면 개인화 노드 포함, False면 제외
     """
     logger.info(f"Creating Adaptive RAG graph (personalization={enable_personalization})...")
 
@@ -188,7 +162,7 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     workflow.add_node("answer_grading", answer_grading_node)
     workflow.add_node("web_search", web_search_node)
 
-    # 개인화 및 질문 추천 노드 등록 (enable_personalization=True일 때만)
+    # 개인화 노드 등록 (enable_personalization=True일 때만)
     if enable_personalization:
         workflow.add_node("load_user_context", load_user_context_node)
         workflow.add_node("personalize_response", personalize_response_node)
@@ -251,8 +225,12 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
     # Web Search → Generate
     workflow.add_edge("web_search", "generate")
 
-    # Generate → Hallucination Check (항상)
-    workflow.add_edge("generate", "hallucination_check")
+    # Generate → 다음 노드 (개인화 여부에 따라 분기)
+    if enable_personalization:
+        workflow.add_edge("generate", "personalize_response")
+        workflow.add_edge("personalize_response", "hallucination_check")
+    else:
+        workflow.add_edge("generate", "hallucination_check")
 
     # Hallucination Check → Answer Grading / WebSearch / Retry Generate
     workflow.add_conditional_edges(
@@ -265,30 +243,37 @@ def create_rag_graph(enable_personalization: bool = True) -> StateGraph:
         },
     )
 
-    # Answer Grading → Personalize / WebSearch / END
-    workflow.add_conditional_edges(
-        "answer_grading",
-        grade_generation_usefulness,
-        {
-            "personalize": "personalize_response" if enable_personalization else END,
-            "websearch": "web_search",
-            "end": END,
-        },
-    )
-
-    # Personalize Response → Suggest Questions (개인화 활성화 시)
+    # Answer Grading → END / WebSearch / Suggest Questions (개인화 여부에 따라)
     if enable_personalization:
-        workflow.add_edge("personalize_response", "suggest_related_questions")
+        workflow.add_conditional_edges(
+            "answer_grading",
+            grade_generation_usefulness,
+            {
+                "end": "suggest_related_questions",  # 개인화: 관련 질문 생성 후 종료
+                "websearch": "web_search",
+            },
+        )
         workflow.add_edge("suggest_related_questions", END)
+    else:
+        workflow.add_conditional_edges(
+            "answer_grading",
+            grade_generation_usefulness,
+            {
+                "end": END,
+                "websearch": "web_search",
+            },
+        )
 
     app = workflow.compile()
     logger.info(f"✓ Adaptive RAG graph created successfully (personalization={enable_personalization})")
     return app
+# NEW END - enable_personalization 파라미터 추가
 
 
 # ========== 그래프 실행/시각화 ==========
 
 
+# NEW START - enable_personalization 파라미터 추가
 def run_rag_graph(
     question: str,
     config_path: str = None,
@@ -304,7 +289,7 @@ def run_rag_graph(
         config_path: 설정 파일 경로 (선택)
         user_id: 사용자 식별자 (개인화에 사용, 선택)
         user_context: 사용자 컨텍스트 (Django에서 전달, 선택)
-        enable_personalization: 개인화 및 질문 추천 기능 활성화 여부
+        enable_personalization: 개인화 기능 활성화 여부
     """
     from .state import create_initial_state
     from .config import get_config
@@ -320,8 +305,6 @@ def run_rag_graph(
     logger.info(f"\n{'=' * 80}")
     logger.info(f"질문: {question}")
     logger.info(f"개인화: {enable_personalization}")
-    if user_id:
-        logger.info(f"사용자 ID: {user_id}")
     logger.info(f"{'=' * 80}\n")
 
     try:
@@ -340,6 +323,90 @@ def run_rag_graph(
     except Exception as e:
         logger.error(f"그래프 실행 실패: {e}", exc_info=True)
         raise
+
+
+async def run_parallel_rag(
+    question: str,
+    user_id: str = "",
+    config_path: str = None,
+) -> dict:
+    """
+    개인화 ON/OFF 두 버전을 병렬 실행하여 A/B 비교
+
+    Args:
+        question: 사용자 질문
+        user_id: 사용자 식별자 (개인화 버전에서 사용)
+        config_path: 설정 파일 경로 (선택)
+
+    Returns:
+        dict: {
+            "answer_without_personalization": str,
+            "answer_with_personalization": str,
+            "state_without_personalization": dict,
+            "state_with_personalization": dict,
+        }
+    """
+    import asyncio
+    from .state import create_initial_state
+    from .config import get_config
+
+    if config_path:
+        _ = get_config(config_path)
+    else:
+        _ = get_config()
+
+    logger.info(f"\n{'=' * 80}")
+    logger.info(f"[Parallel RAG] 병렬 실행 시작")
+    logger.info(f"질문: {question}")
+    logger.info(f"{'=' * 80}\n")
+
+    # 같은 함수를 파라미터만 다르게 호출
+    app_no_p = create_rag_graph(enable_personalization=False)
+    app_with_p = create_rag_graph(enable_personalization=True)
+
+    state_no_p = create_initial_state(question, user_id="")
+    state_with_p = create_initial_state(question, user_id=user_id)
+
+    def run_graph(app, initial_state, label: str):
+        """그래프 실행 헬퍼"""
+        logger.info(f"[{label}] 실행 시작")
+        final_state = None
+        for state in app.stream(initial_state):
+            for _, node_state in state.items():
+                final_state = node_state
+        logger.info(f"[{label}] 실행 완료")
+        return final_state
+
+    # 병렬 실행
+    result_no_p, result_with_p = await asyncio.gather(
+        asyncio.to_thread(run_graph, app_no_p, state_no_p, "Without Personalization"),
+        asyncio.to_thread(run_graph, app_with_p, state_with_p, "With Personalization"),
+    )
+
+    logger.info(f"\n{'=' * 80}")
+    logger.info(f"[Parallel RAG] 병렬 실행 완료")
+    logger.info(f"{'=' * 80}\n")
+
+    return {
+        "answer_without_personalization": result_no_p.get("generation", ""),
+        "answer_with_personalization": result_with_p.get("generation", ""),
+        "state_without_personalization": result_no_p,
+        "state_with_personalization": result_with_p,
+    }
+
+
+def run_parallel_rag_sync(
+    question: str,
+    user_id: str = "",
+    config_path: str = None,
+) -> dict:
+    """
+    run_parallel_rag의 동기 버전 (asyncio.run 래퍼)
+    """
+    import asyncio
+
+    return asyncio.run(run_parallel_rag(question, user_id, config_path))
+# NEW END - enable_personalization 파라미터 추가
 
 
 def visualize_graph(output_path: str = "rag_graph.png"):
