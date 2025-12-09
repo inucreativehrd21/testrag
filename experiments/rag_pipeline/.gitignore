@@ -6,9 +6,9 @@ env/
 ENV/
 
 # Artifacts and generated files
-artifacts/
-*.parquet
-chroma_db/
+# artifacts/
+# *.parquet
+# chroma_db/
 logs/
 *.log
 
