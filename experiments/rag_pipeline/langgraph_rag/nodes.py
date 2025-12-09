@@ -774,49 +774,56 @@ def generate_node(state):
 
     # 답변 형식 가이드 추가
     format_guide = """
-답변 형식 규칙:
-1. 첫 1-3문장은 자연스럽게 이어지는 설명으로 시작 (bullet point 사용 금지)
+
+🚨🚨🚨 CRITICAL 답변 형식 규칙 🚨🚨🚨
+
+1. 첫 1-3문장은 자연스럽게 이어지는 설명으로 시작 (절대 bullet point로 시작 금지!)
 2. 세부 사항이나 목록은 그 다음에 bullet points(-)로 나열
-3. ⭐ CRITICAL: "예시:" 라벨 앞에는 반드시 빈 줄을 넣어서 본문과 구분
-4. 코드 예시는 "예시:" 라벨 다음 줄에 코드 블록 시작
+3. 🔴 MANDATORY: "예시:", "적용 예시:", "사용 예시:" 등 모든 예시 라벨 앞에는 반드시 빈 줄 1개 삽입!
+4. 예시 라벨과 코드 블록 사이에도 빈 줄 없이 바로 이어짐
 5. 본문에 툴/출처명(tavily, websearch 등) 절대 포함 금지
-6. 출처는 마지막 '📚 참고' 섹션에만 표기
 
-좋은 예시 ✅:
+정답 예시 ✅ (반드시 이 형식 따르기):
 \"\"\"
-파이썬 리스트는 여러 값을 하나의 변수에 저장할 수 있는 가변적인 자료형이에요. 대괄호([])로 만들고, 순서가 있으며 값의 변경이 자유롭죠.
+그리디 알고리즘과 동적 계획법은 최적화 문제 해결 방법이에요. 그리디는 매 순간 최선의 선택을 하고, DP는 모든 경우를 고려해요.
 
-주요 특징:
-- 순서가 있어서 인덱스로 접근 가능
-- 값 변경, 추가, 삭제가 자유로움
-- 중복된 값 저장 가능
+차이점:
+- 그리디: 현재 최선만 고려, 빠르지만 최적해 보장 안 함
+- DP: 모든 경우 고려, 느리지만 최적해 보장
 
 예시:
-```python
-fruits = ["apple", "banana", "cherry"]
-print(fruits[0])  # apple
-```
+\```python
+# 그리디: 거스름돈
+coins = [500, 100, 50, 10]
+count = sum(n // c for c in coins)
+\```
 \"\"\"
 
-나쁜 예시 ❌ (빈 줄 없이 바로 붙음):
+오답 예시 ❌ (빈 줄 없음):
 \"\"\"
-파이썬 리스트는:
-- 여러 값을 저장
-- 대괄호로 만듦
-- 순서가 있음
+차이점:
+- 그리디: 빠름
+- DP: 느림
 예시:
-fruits = ["apple"]
+\```python
+code here
+\```
 \"\"\"
 
-나쁜 예시 ❌ (bullet point로만 설명):
+오답 예시 ❌ (bullet만 있고 자연스러운 설명 없음):
 \"\"\"
-파이썬 리스트:
-- 여러 값을 하나의 변수에 저장
-- 대괄호로 만듦
+그리디와 DP:
+- 차이점 A
+- 차이점 B
 
 예시:
-fruits = ["apple"]
+code
 \"\"\"
+
+🔴 반드시 지켜야 할 것:
+- 첫 문장은 자연스러운 문장으로 (bullet 금지)
+- "예시:" 앞에는 무조건 빈 줄 1개
+- 코드는 반드시 \```언어 블록으로 감싸기
 """
 
     system_content = resources.system_prompt + format_guide
@@ -875,12 +882,17 @@ fruits = ["apple"]
         # 기존 출처 제거 및 툴명 정리
         answer_text = _clean_tool_mentions(_strip_existing_sources(answer_text))
 
-        # URL 출처 추가
+        # URL 출처 추가 (tavily.com 등 검색 엔진 URL 제외)
         source_urls = []
+        excluded_domains = ["tavily.com", "tavily", "search.tavily.com"]
+
         for meta in metadatas:
             url = meta.get("url", "unknown")
+            # unknown이 아니고, 중복되지 않고, 제외 도메인이 아닌 경우만 추가
             if url != "unknown" and url not in source_urls:
-                source_urls.append(url)
+                # 제외 도메인 체크
+                if not any(domain in url.lower() for domain in excluded_domains):
+                    source_urls.append(url)
 
         if source_urls:
             sources_section = "\n\n📚 참고:\n" + "\n".join(
